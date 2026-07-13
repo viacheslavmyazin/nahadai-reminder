@@ -87,7 +87,7 @@
         <button type="button" data-priority="medium" class="selected"><i></i>Звичайне</button>
         <button type="button" data-priority="low"><i></i>Можна згодом</button>
       </div></fieldset>
-      <div class="modal-actions"><button type="button" class="cancel-btn" id="cancel">Скасувати</button><button class="primary-btn">♢ <span id="save-label">Нагадати мені</span></button></div>
+      <div class="modal-actions"><button type="button" class="cancel-btn" id="cancel">Скасувати</button><button type="submit" class="primary-btn">♢ <span id="save-label">Нагадати мені</span></button></div>
     </form>
   </div>
 
@@ -103,10 +103,24 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="bot-onboarding">
+    <div class="modal bot-onboarding-modal">
+      <div class="modal-head"><div><span class="eyebrow">КРОК 2 З 2</span><h2>Увімкніть нагадування</h2></div></div>
+      <div class="bot-onboarding-icon">✈</div>
+      <p>Telegram вимагає один раз відкрити бота й натиснути <strong>Start</strong>. Після цього «Нагадай» зможе надсилати ваші приватні нагадування.</p>
+      <a class="telegram-login-btn" id="open-bot" href="https://t.me/NahadaiReminderBot?start=nahadai" target="_blank" rel="noopener">1. Відкрити @NahadaiReminderBot</a>
+      <button type="button" class="primary-btn bot-check-btn" id="bot-check">2. Я натиснув Start — перевірити</button>
+      <p class="connection-result" id="bot-check-result" aria-live="polite"></p>
+      <button type="button" class="bot-later-btn" id="bot-later">Зробити пізніше</button>
+    </div>
+  </div>
+
   <div class="toast hidden" id="toast"><span>✓</span><p><strong id="toast-title">Готово!</strong><small id="toast-message">Нагадування збережено</small></p></div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
+
 
 
 
