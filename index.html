@@ -1,0 +1,80 @@
+﻿<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4f1e9" />
+  <meta name="description" content="Нагадай — простий простір для важливих справ." />
+  <title>Нагадай — тримай важливе поруч</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#"><span class="brand-mark">♢</span><b>нагадай</b></a>
+      <nav>
+        <button data-filter="today"><span class="nav-icon">▣</span><i>Сьогодні</i><em id="today-count">0</em></button>
+        <button data-filter="upcoming" class="active"><span class="nav-icon">◫</span><i>Усі справи</i></button>
+        <button data-filter="done"><span class="nav-icon">✓</span><i>Виконані</i><em id="done-count">0</em></button>
+      </nav>
+      <div class="aside-quote"><span>✦</span><p>Маленькі кроки<br><strong>ведуть до великих змін.</strong></p></div>
+      <div class="profile"><span>М</span><div><strong>Мій простір</strong><small>Усе під контролем</small></div><b>⌄</b></div>
+    </aside>
+
+    <main>
+      <header>
+        <div>
+          <span class="eyebrow">ВАШ ОСОБИСТИЙ ПРОСТІР</span>
+          <h1>Тримайте важливе <i>поруч.</i></h1>
+          <p id="today-label"></p>
+        </div>
+        <button class="primary-btn" id="new-btn"><span>＋</span> Нове нагадування</button>
+      </header>
+
+      <section class="dashboard">
+        <div class="list-panel">
+          <div class="toolbar">
+            <label class="search"><span>⌕</span><input id="search" placeholder="Знайти нагадування..." aria-label="Пошук"></label>
+            <button class="sort-btn">☷ <span>За часом</span></button>
+          </div>
+          <div class="section-title"><div><span id="section-kicker">НАЙБЛИЖЧІ СПРАВИ</span><h2 id="section-name">Попереду</h2></div><b id="shown-count">0</b></div>
+          <div id="reminders"></div>
+        </div>
+
+        <aside class="calendar-panel">
+          <div class="calendar-top"><button id="prev-month">‹</button><h3 id="month-title"></h3><button id="next-month">›</button></div>
+          <div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Нд</span></div>
+          <div class="calendar-grid" id="calendar"></div>
+          <div class="progress-card">
+            <div><span>Ваш ритм</span><strong id="progress-label">0 виконано</strong></div>
+            <div class="progress"><i id="progress-bar"></i></div>
+            <p>Кожна завершена справа — трохи більше простору для себе.</p>
+          </div>
+          <button class="quick-add" id="quick-add"><span>＋</span><div><strong>Швидке нагадування</strong><small>Додайте за кілька секунд</small></div><b>›</b></button>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modal">
+    <form class="modal" id="reminder-form">
+      <div class="modal-head"><div><span class="eyebrow">ВАЖЛИВИЙ МОМЕНТ</span><h2 id="modal-title">Нове нагадування</h2></div><button type="button" class="close-btn" id="close-modal">×</button></div>
+      <label>Що нагадати?<input id="title" required maxlength="80" placeholder="Наприклад, подзвонити бабусі"></label>
+      <label>Нотатка<textarea id="note" maxlength="180" placeholder="Додайте деталі, якщо потрібно"></textarea></label>
+      <div class="form-row"><label>Дата<input id="date" type="date" required></label><label>Час<input id="time" type="time" required></label></div>
+      <fieldset><legend>Пріоритет</legend><div class="priority-options">
+        <button type="button" data-priority="high"><i></i>Важливе</button>
+        <button type="button" data-priority="medium" class="selected"><i></i>Звичайне</button>
+        <button type="button" data-priority="low"><i></i>Можна згодом</button>
+      </div></fieldset>
+      <div class="modal-actions"><button type="button" class="cancel-btn" id="cancel">Скасувати</button><button class="primary-btn">♢ <span id="save-label">Нагадати мені</span></button></div>
+    </form>
+  </div>
+
+  <div class="toast hidden" id="toast"><span>✓</span><p><strong>Готово!</strong><small>Нагадування збережено</small></p></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
