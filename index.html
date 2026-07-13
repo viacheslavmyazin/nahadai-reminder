@@ -79,13 +79,13 @@
   <div class="modal-backdrop hidden" id="modal">
     <form class="modal" id="reminder-form">
       <div class="modal-head"><div><span class="eyebrow">ВАЖЛИВИЙ МОМЕНТ</span><h2 id="modal-title">Нове нагадування</h2></div><button type="button" class="close-btn" id="close-modal">×</button></div>
-      <label>Що нагадати?<input id="title" required maxlength="80" placeholder="Наприклад, подзвонити бабусі"></label>
-      <label>Нотатка<textarea id="note" maxlength="180" placeholder="Додайте деталі, якщо потрібно"></textarea></label>
+      <label>Завдання або нагадування<input id="title" required maxlength="80" placeholder="Наприклад, підготувати звіт або запланувати тренування"></label>
+      <label>Деталі / план<textarea id="note" maxlength="180" placeholder="Контекст, наступний крок або очікуваний результат"></textarea></label>
       <div class="form-row"><label>Дата<input id="date" type="date" required></label><label>Час<input id="time" type="time" required></label></div>
-      <fieldset><legend>Пріоритет</legend><div class="priority-options">
-        <button type="button" data-priority="high"><i></i>Важливе</button>
-        <button type="button" data-priority="medium" class="selected"><i></i>Звичайне</button>
-        <button type="button" data-priority="low"><i></i>Можна згодом</button>
+      <fieldset><legend>Критичність</legend><div class="priority-options">
+        <button type="button" data-priority="high"><i></i>Висока</button>
+        <button type="button" data-priority="medium" class="selected"><i></i>Середня</button>
+        <button type="button" data-priority="low"><i></i>Низька</button>
       </div></fieldset>
       <div class="modal-actions"><button type="button" class="cancel-btn" id="cancel">Скасувати</button><button type="submit" class="primary-btn">♢ <span id="save-label">Нагадати мені</span></button></div>
     </form>
@@ -119,6 +119,8 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
+
 
 
 
