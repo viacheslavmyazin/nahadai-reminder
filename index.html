@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
@@ -11,18 +11,31 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body>
+<body class="auth-required">
+  <div class="auth-gate" id="auth-gate">
+    <div class="auth-card">
+      <div class="kernel-brand kernel-brand-auth"><span>ДЛЯ КОМАНДИ</span><img src="https://www.kernel.ua/wp-content/uploads/2025/03/logo_30_kernelua.svg" alt="Kernel"></div>
+      <span class="auth-mark">♢</span>
+      <span class="eyebrow">ВАШ ОСОБИСТИЙ ПРОСТІР</span>
+      <h2>Увійдіть у «Нагадай»</h2>
+      <p>Нагадування синхронізуються між пристроями, а бот надсилає лише ваші повідомлення.</p>
+      <button class="telegram-login-btn" id="telegram-login"><span>✈</span> Увійти через Telegram</button>
+      <small id="auth-message">Без паролів. Без спільних ключів.</small>
+    </div>
+  </div>
+
   <div class="app-shell">
     <aside class="sidebar">
       <a class="brand" href="#"><span class="brand-mark">♢</span><b>нагадай</b></a>
+      <div class="kernel-brand kernel-brand-sidebar"><span>ДЛЯ КОМАНДИ</span><img src="https://www.kernel.ua/wp-content/uploads/2025/03/logo_30_kernelua.svg" alt="Kernel"></div>
       <nav>
         <button data-filter="today"><span class="nav-icon">▣</span><i>Сьогодні</i><em id="today-count">0</em></button>
         <button data-filter="upcoming" class="active"><span class="nav-icon">◫</span><i>Усі справи</i></button>
         <button data-filter="done"><span class="nav-icon">✓</span><i>Виконані</i><em id="done-count">0</em></button>
       </nav>
-      <button class="telegram-link" id="telegram-settings"><span>✈</span><div><strong>Telegram</strong><small id="telegram-status">Не підключено</small></div><b>›</b></button>
+      <button class="telegram-link" id="telegram-settings"><span>✈</span><div><strong>Telegram</strong><small id="telegram-status">Підключено</small></div><b>›</b></button>
       <div class="aside-quote"><span>✦</span><p>Маленькі кроки<br><strong>ведуть до великих змін.</strong></p></div>
-      <div class="profile"><span>М</span><div><strong>Мій простір</strong><small>Усе під контролем</small></div><b>⌄</b></div>
+      <button class="profile" id="profile-button"><span id="profile-avatar">М</span><div><strong id="profile-name">Мій простір</strong><small id="profile-caption">Telegram</small></div><b>⌄</b></button>
     </aside>
 
     <main>
@@ -32,7 +45,10 @@
           <h1>Тримайте важливе <i>поруч.</i></h1>
           <p id="today-label"></p>
         </div>
-        <button class="primary-btn" id="new-btn"><span>＋</span> Нове нагадування</button>
+        <div class="header-actions">
+          <button class="header-account" id="header-account" aria-label="Обліковий запис">М</button>
+          <button class="primary-btn" id="new-btn"><span>＋</span> Нове нагадування</button>
+        </div>
       </header>
 
       <section class="dashboard">
@@ -75,21 +91,21 @@
     </form>
   </div>
 
-  <div class="modal-backdrop hidden" id="telegram-modal">
-    <form class="modal telegram-modal" id="telegram-form">
-      <div class="modal-head"><h2>Telegram</h2><button type="button" class="close-btn" id="close-telegram">×</button></div>
-      <label>Worker URL<input id="worker-url" type="url" required></label>
-      <label>Ключ доступу<input id="worker-key" type="password" required></label>
-      <div class="connection-result" id="connection-result"></div>
-      <div class="modal-actions"><button type="button" class="cancel-btn" id="disconnect-telegram">Відключити</button><button class="primary-btn">Зберегти</button></div>
-    </form>
+  <div class="modal-backdrop hidden" id="account-modal">
+    <div class="modal account-modal">
+      <div class="modal-head"><h2>Обліковий запис</h2><button type="button" class="close-btn" id="close-account">×</button></div>
+      <div class="account-card">
+        <span id="account-avatar">М</span>
+        <div><strong id="account-name">Користувач Telegram</strong><small id="account-username">Telegram підключено</small></div>
+      </div>
+      <div class="account-state"><span>✓</span><div><strong>Telegram підключено постійно</strong><small>Нагадування працюють навіть із закритим сайтом</small></div></div>
+      <div class="modal-actions"><button type="button" class="danger-btn" id="logout">Вийти з облікового запису</button><button type="button" class="primary-btn" id="close-account-primary">Готово</button></div>
+    </div>
   </div>
 
-  <div class="toast hidden" id="toast"><span>✓</span><p><strong>Готово!</strong><small>Нагадування збережено</small></p></div>
+  <div class="toast hidden" id="toast"><span>✓</span><p><strong id="toast-title">Готово!</strong><small id="toast-message">Нагадування збережено</small></p></div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-
-
 
 
