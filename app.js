@@ -109,12 +109,13 @@ q("#reminders").onclick=async e=>{
 };
 q("#telegram-settings").onclick=q("#profile-button").onclick=q("#header-account").onclick=openAccount;
 q("#close-account").onclick=q("#close-account-primary").onclick=()=>q("#account-modal").classList.add("hidden");
-q("#bot-check").onclick=verifyBotConnection;q("#bot-later").onclick=hideBotOnboarding;q("#open-bot").onclick=()=>{q("#bot-check-result").className="connection-result";q("#bot-check-result").textContent="У Telegram натисніть Start, потім поверніться сюди."};
+q("#bot-check").onclick=verifyBotConnection;q("#bot-later").onclick=hideBotOnboarding;q("#open-bot").onclick=()=>{q("#bot-check-result").className="connection-result";q("#bot-check-result").textContent="Після Start можете залишатися в Telegram — бот підключиться автоматично протягом хвилини."};
 q("#account-modal").addEventListener("mousedown",e=>{if(e.target===e.currentTarget)q("#account-modal").classList.add("hidden")});
 q("#logout").onclick=async()=>{try{await api("/api/logout",{method:"POST"})}catch{}clearSession();reminders=[];q("#account-modal").classList.add("hidden");render();showAuth("Ви вийшли з облікового запису.")};
 q("#prev-month").onclick=()=>{monthOffset--;renderCalendar()};q("#next-month").onclick=()=>{monthOffset++;renderCalendar()};
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal();q("#account-modal").classList.add("hidden")}});
 setInterval(()=>{const now=new Date();reminders.forEach(r=>{if(!r.done&&!r.notified&&new Date(r.date+"T"+r.time)<=now){if("Notification" in window&&Notification.permission==="granted")new Notification(r.title,{body:r.note||"Час виконати заплановане"});r.notified=true;saveCache()}})},30000);
 render();initializeAuth();
+
 
 
