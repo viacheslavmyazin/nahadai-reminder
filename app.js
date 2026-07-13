@@ -2,7 +2,7 @@ const WORKER_URL="https://nahadai-telegram.slavamyazin.workers.dev";
 const LEGACY_STORE="nahadai-reminders-v1",SESSION_STORE="nahadai-session-v2",USER_STORE="nahadai-user-v2";
 const pad=n=>String(n).padStart(2,"0"),dateKey=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return dateKey(d)},today=dateKey();
-const priorities={high:{label:"Важливе",color:"#e76f51"},medium:{label:"Звичайне",color:"#d7a22a"},low:{label:"Можна згодом",color:"#77a88d"}};
+const priorities={high:{label:"Висока критичність",color:"#e76f51"},medium:{label:"Середня критичність",color:"#d7a22a"},low:{label:"Низька критичність",color:"#77a88d"}};
 let reminders=[],filter="upcoming",query="",editingId=null,selectedPriority="medium",monthOffset=0;
 let sessionToken=localStorage.getItem(SESSION_STORE)||"",currentUser;
 try{currentUser=JSON.parse(localStorage.getItem(USER_STORE)||"null")}catch{currentUser=null}
@@ -116,4 +116,5 @@ q("#prev-month").onclick=()=>{monthOffset--;renderCalendar()};q("#next-month").o
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal();q("#account-modal").classList.add("hidden")}});
 setInterval(()=>{const now=new Date();reminders.forEach(r=>{if(!r.done&&!r.notified&&new Date(r.date+"T"+r.time)<=now){if("Notification" in window&&Notification.permission==="granted")new Notification(r.title,{body:r.note||"Час виконати заплановане"});r.notified=true;saveCache()}})},30000);
 render();initializeAuth();
+
 
