@@ -20,6 +20,7 @@
         <button data-filter="upcoming" class="active"><span class="nav-icon">◫</span><i>Усі справи</i></button>
         <button data-filter="done"><span class="nav-icon">✓</span><i>Виконані</i><em id="done-count">0</em></button>
       </nav>
+      <button class="telegram-link" id="telegram-settings"><span>✈</span><div><strong>Telegram</strong><small id="telegram-status">Не підключено</small></div><b>›</b></button>
       <div class="aside-quote"><span>✦</span><p>Маленькі кроки<br><strong>ведуть до великих змін.</strong></p></div>
       <div class="profile"><span>М</span><div><strong>Мій простір</strong><small>Усе під контролем</small></div><b>⌄</b></div>
     </aside>
@@ -74,7 +75,20 @@
     </form>
   </div>
 
+  <div class="modal-backdrop hidden" id="telegram-modal">
+    <form class="modal telegram-modal" id="telegram-form">
+      <div class="modal-head"><h2>Telegram</h2><button type="button" class="close-btn" id="close-telegram">×</button></div>
+      <label>Worker URL<input id="worker-url" type="url" required></label>
+      <label>Ключ доступу<input id="worker-key" type="password" required></label>
+      <div class="connection-result" id="connection-result"></div>
+      <div class="modal-actions"><button type="button" class="cancel-btn" id="disconnect-telegram">Відключити</button><button class="primary-btn">Зберегти</button></div>
+    </form>
+  </div>
+
   <div class="toast hidden" id="toast"><span>✓</span><p><strong>Готово!</strong><small>Нагадування збережено</small></p></div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
+
+
