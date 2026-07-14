@@ -30,7 +30,8 @@
       <div class="kernel-brand kernel-brand-sidebar"><span>ДЛЯ КОМАНДИ</span><img src="https://www.kernel.ua/wp-content/uploads/2025/03/logo_30_kernelua.svg" alt="Kernel"></div>
       <nav>
         <button data-filter="today"><span class="nav-icon">▣</span><i>Сьогодні</i><em id="today-count">0</em></button>
-        <button data-filter="upcoming" class="active"><span class="nav-icon">◫</span><i>Усі справи</i></button>
+        <button data-filter="reminders" class="active"><span class="nav-icon">◇</span><i>Нагадування</i><em id="reminder-count">0</em></button>
+        <button data-filter="tasks"><span class="nav-icon">☷</span><i>Задачі</i><em id="task-count">0</em></button>
         <button data-filter="done"><span class="nav-icon">✓</span><i>Виконані</i><em id="done-count">0</em></button>
       </nav>
       <button class="telegram-link" id="telegram-settings"><span>✈</span><div><strong>Telegram</strong><small id="telegram-status">Підключено</small></div><b>›</b></button>
@@ -47,14 +48,14 @@
         </div>
         <div class="header-actions">
           <button class="header-account" id="header-account" aria-label="Обліковий запис">М</button>
-          <button class="primary-btn" id="new-btn"><span>＋</span> Нове нагадування</button>
+          <button class="primary-btn" id="new-btn"><span>＋</span> Додати</button>
         </div>
       </header>
 
       <section class="dashboard">
         <div class="list-panel">
           <div class="toolbar">
-            <label class="search"><span>⌕</span><input id="search" placeholder="Знайти нагадування..." aria-label="Пошук"></label>
+            <label class="search"><span>⌕</span><input id="search" placeholder="Знайти нагадування або задачу..." aria-label="Пошук"></label>
             <button class="sort-btn">☷ <span>За часом</span></button>
           </div>
           <div class="section-title"><div><span id="section-kicker">НАЙБЛИЖЧІ СПРАВИ</span><h2 id="section-name">Попереду</h2></div><b id="shown-count">0</b></div>
@@ -70,7 +71,7 @@
             <div class="progress"><i id="progress-bar"></i></div>
             <p>Кожна завершена справа — трохи більше простору для себе.</p>
           </div>
-          <button class="quick-add" id="quick-add"><span>＋</span><div><strong>Швидке нагадування</strong><small>Додайте за кілька секунд</small></div><b>›</b></button>
+          <button class="quick-add" id="quick-add"><span>＋</span><div><strong>Швидко додати</strong><small>Нагадування або задачу</small></div><b>›</b></button>
         </aside>
       </section>
     </main>
@@ -79,9 +80,25 @@
   <div class="modal-backdrop hidden" id="modal">
     <form class="modal" id="reminder-form">
       <div class="modal-head"><div><span class="eyebrow">ВАЖЛИВИЙ МОМЕНТ</span><h2 id="modal-title">Нове нагадування</h2></div><button type="button" class="close-btn" id="close-modal">×</button></div>
-      <label>Завдання або нагадування<input id="title" required maxlength="80" placeholder="Наприклад, підготувати звіт або запланувати тренування"></label>
+      <fieldset class="type-fieldset"><legend>Що створюємо?</legend><div class="item-type-options">
+        <button type="button" data-item-type="reminder" class="selected">◇ Нагадування</button>
+        <button type="button" data-item-type="task">☷ Задачу</button>
+      </div></fieldset>
+      <label>Назва<input id="title" required maxlength="80" placeholder="Наприклад, підготувати щотижневий звіт"></label>
       <label>Деталі / план<textarea id="note" maxlength="180" placeholder="Контекст, наступний крок або очікуваний результат"></textarea></label>
       <div class="form-row"><label>Дата<input id="date" type="date" required></label><label>Час<input id="time" type="time" required></label></div>
+      <div id="reminder-options">
+        <div class="form-row recurrence-row">
+          <label>Повторення<select id="recurrence-type">
+            <option value="none">Не повторювати</option><option value="daily">Щодня</option>
+            <option value="weekdays">У робочі дні</option><option value="weekly">Щотижня</option><option value="monthly">Щомісяця</option>
+          </select></label>
+          <label id="recurrence-interval-wrap" class="hidden">Інтервал<input id="recurrence-interval" type="number" min="1" max="52" value="1"><small id="recurrence-hint">Кожні 1 тиждень</small></label>
+        </div>
+      </div>
+      <div id="task-options" class="hidden">
+        <label>Статус<select id="task-status"><option value="planned">Заплановано</option><option value="in_progress">У роботі</option><option value="done">Виконано</option></select></label>
+      </div>
       <fieldset><legend>Критичність</legend><div class="priority-options">
         <button type="button" data-priority="high"><i></i>Висока</button>
         <button type="button" data-priority="medium" class="selected"><i></i>Середня</button>
@@ -119,6 +136,7 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
 
 
 
