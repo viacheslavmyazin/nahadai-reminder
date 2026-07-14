@@ -114,8 +114,25 @@ q("#account-modal").addEventListener("mousedown",e=>{if(e.target===e.currentTarg
 q("#logout").onclick=async()=>{try{await api("/api/logout",{method:"POST"})}catch{}clearSession();reminders=[];q("#account-modal").classList.add("hidden");render();showAuth("Ви вийшли з облікового запису.")};
 q("#prev-month").onclick=()=>{monthOffset--;renderCalendar()};q("#next-month").onclick=()=>{monthOffset++;renderCalendar()};
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal();q("#account-modal").classList.add("hidden")}});
-setInterval(()=>{const now=new Date();reminders.forEach(r=>{if(!r.done&&!r.notified&&new Date(r.date+"T"+r.time)<=now){if("Notification" in window&&Notification.permission==="granted")new Notification(r.title,{body:r.note||"Час виконати заплановане"});r.notified=true;saveCache()}})},30000);
+async function checkBrowserReminders(){
+ if(!sessionToken||!currentUser||!("Notification" in window)||Notification.permission!=="granted")return;
+ const run=async()=>{
+  let fresh;try{const data=await api("/api/reminders");fresh=(data.reminders||[]).map(fromRemote)}catch{return}
+  reminders=fresh;saveCache();if(document.visibilityState==="visible"&&q("#modal").classList.contains("hidden"))render();
+  const now=Date.now();
+  for(const reminder of fresh){
+   if(reminder.done||reminder.notified||new Date(reminder.date+"T"+reminder.time).getTime()>now)continue;
+   const key=`nahadai-browser-notified:${currentUser.id}:${reminder.id}:${reminder.date}:${reminder.time}`;
+   if(localStorage.getItem(key))continue;
+   localStorage.setItem(key,String(now));
+   new Notification(reminder.title,{body:reminder.note||"Час виконати заплановане",tag:key});
+  }
+ };
+ if(navigator.locks){await navigator.locks.request("nahadai-browser-reminder-check",{ifAvailable:true},lock=>lock?run():undefined)}else await run();
+}
+setInterval(checkBrowserReminders,60000);
 render();initializeAuth();
+
 
 
 
