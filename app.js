@@ -5,6 +5,7 @@ const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return dateKey(d)}
 const priorities={high:{label:"Висока критичність",color:"#e76f51"},medium:{label:"Середня критичність",color:"#d7a22a"},low:{label:"Низька критичність",color:"#77a88d"}};
 let reminders=[],filter="upcoming",query="",editingId=null,selectedPriority="medium",monthOffset=0;
 let sessionToken=localStorage.getItem(SESSION_STORE)||"",currentUser;
+let botActivationTimer=null,botActivationAttempts=0,botActivationBusy=false;
 try{currentUser=JSON.parse(localStorage.getItem(USER_STORE)||"null")}catch{currentUser=null}
 const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -35,12 +36,17 @@ async function refreshBotConnection(showWhenMissing=false){
  try{const data=await api("/api/bot/status");setBotStatus(Boolean(data.connected));if(data.connected)hideBotOnboarding();else if(showWhenMissing)showBotOnboarding();return Boolean(data.connected)}
  catch(error){console.warn("Bot status unavailable",error);return false}
 }
-async function verifyBotConnection(){
- const button=q("#bot-check"),result=q("#bot-check-result");button.disabled=true;result.className="connection-result";result.textContent="Перевіряємо підключення…";
- try{await api("/api/bot/connect",{method:"POST"});result.className="connection-result success";result.textContent="Готово! Бот підключено й надіслав привітання.";setBotStatus(true);setTimeout(hideBotOnboarding,1200)}
- catch(error){result.className="connection-result error";result.textContent=error.message||"У Telegram спочатку натисніть Start, потім повторіть перевірку."}
- finally{button.disabled=false}
-}function cleanAuthParameters(){const url=new URL(location.href);url.searchParams.delete("login_code");url.searchParams.delete("auth_error");history.replaceState({},"",url.pathname+url.search+url.hash)}
+function stopBotActivation(){if(botActivationTimer)clearInterval(botActivationTimer);botActivationTimer=null;botActivationBusy=false}
+async function attemptBotActivation(manual=false){
+ if(botActivationBusy)return false;botActivationBusy=true;
+ const button=q("#bot-check"),result=q("#bot-check-result");if(manual){button.disabled=true;result.className="connection-result";result.textContent="Перевіряємо підключення…"}
+ try{await api("/api/bot/connect",{method:"POST"});stopBotActivation();result.className="connection-result success";result.textContent="Готово! Бот підключено — нагадування активні.";setBotStatus(true);notify("Telegram підключено","Нагадування активні");setTimeout(hideBotOnboarding,900);return true}
+ catch(error){botActivationAttempts++;if(manual){result.className="connection-result error";result.textContent=error.message||"У Telegram спочатку натисніть Start, потім повторіть перевірку."}if(botActivationAttempts>=30){stopBotActivation();result.className="connection-result error";result.textContent="Не вдалося підтвердити Start. Натисніть Start у боті та перевірте підключення ще раз."}return false}
+ finally{botActivationBusy=false;if(manual)button.disabled=false}
+}
+function beginBotActivation(){stopBotActivation();botActivationAttempts=0;const result=q("#bot-check-result");result.className="connection-result";result.textContent="Очікуємо Start у Telegram… Після повернення перевіримо автоматично.";botActivationTimer=setInterval(()=>attemptBotActivation(false),3000)}
+async function verifyBotConnection(){return attemptBotActivation(true)}
+function cleanAuthParameters(){const url=new URL(location.href);url.searchParams.delete("login_code");url.searchParams.delete("auth_error");history.replaceState({},"",url.pathname+url.search+url.hash)}
 async function exchangeLoginCode(code){const data=await api("/api/auth/exchange",{method:"POST",body:JSON.stringify({code})},false);sessionToken=data.token;currentUser=data.user;localStorage.setItem(SESSION_STORE,sessionToken);localStorage.setItem(USER_STORE,JSON.stringify(currentUser))}
 function fromRemote(row){const due=new Date(Number(row.due_at));return{id:String(row.id),title:row.title,note:row.note||"",date:dateKey(due),time:`${pad(due.getHours())}:${pad(due.getMinutes())}`,priority:priorities[row.priority]?row.priority:"medium",done:Boolean(row.done),notified:Boolean(row.sent)}}
 const toRemote=item=>({id:String(item.id),title:item.title,note:item.note||"",dueAt:new Date(item.date+"T"+item.time).toISOString(),priority:item.priority,done:Boolean(item.done)});
@@ -109,7 +115,9 @@ q("#reminders").onclick=async e=>{
 };
 q("#telegram-settings").onclick=q("#profile-button").onclick=q("#header-account").onclick=openAccount;
 q("#close-account").onclick=q("#close-account-primary").onclick=()=>q("#account-modal").classList.add("hidden");
-q("#bot-check").onclick=verifyBotConnection;q("#bot-later").onclick=hideBotOnboarding;q("#open-bot").onclick=()=>{q("#bot-check-result").className="connection-result";q("#bot-check-result").textContent="Після Start можете залишатися в Telegram — бот підключиться автоматично протягом хвилини."};
+q("#bot-check").onclick=verifyBotConnection;q("#bot-later").onclick=()=>{stopBotActivation();hideBotOnboarding()};q("#open-bot").onclick=beginBotActivation;
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&botActivationTimer)attemptBotActivation(false)});
+window.addEventListener("focus",()=>{if(botActivationTimer)attemptBotActivation(false)});
 q("#account-modal").addEventListener("mousedown",e=>{if(e.target===e.currentTarget)q("#account-modal").classList.add("hidden")});
 q("#logout").onclick=async()=>{try{await api("/api/logout",{method:"POST"})}catch{}clearSession();reminders=[];q("#account-modal").classList.add("hidden");render();showAuth("Ви вийшли з облікового запису.")};
 q("#prev-month").onclick=()=>{monthOffset--;renderCalendar()};q("#next-month").onclick=()=>{monthOffset++;renderCalendar()};
@@ -132,6 +140,7 @@ async function checkBrowserReminders(){
 }
 setInterval(checkBrowserReminders,60000);
 render();initializeAuth();
+
 
 
 
