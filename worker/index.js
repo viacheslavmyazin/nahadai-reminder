@@ -683,7 +683,7 @@ function telegramMainKeyboard(env) {
       [{ text: "📅 Сьогодні" }, { text: "📋 Активні" }],
       [{ text: "⚠️ Прострочені" }, { text: "➕ Нова задача" }],
       [{ text: "📂 Проєкти" }, { text: "📊 Статистика" }],
-      [{ text: "🌿 Відкрити планувальник", web_app: { url: appUrl(env) } }],
+      [{ text: "🌿 Відкрити планувальник" }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -727,6 +727,22 @@ function telegramDateBounds(now = Date.now(), timeZone = "Europe/Kyiv") {
 
 function telegramPriorityIcon(priority) {
   return priority === "high" ? "🔴" : priority === "low" ? "🟢" : "🟡";
+}
+
+async function sendTelegramPlannerButton(env, telegramId) {
+  await telegramApi(env, "sendMessage", {
+    chat_id: telegramId,
+    text: "🌿 <b>Відкрити планувальник «Нагадай»</b>",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [[
+        {
+          text: "🌿 Відкрити планувальник",
+          web_app: { url: appUrl(env) },
+        },
+      ]],
+    },
+  });
 }
 
 async function sendTelegramMenu(env, telegramId, displayName = "") {
@@ -1011,6 +1027,7 @@ async function handleTelegramMessageV2(env, message) {
   if (text === "➕ Нова задача") return startTelegramTaskCreation(env, telegramId);
   if (text === "📊 Статистика") return sendTelegramStatistics(env, telegramId);
   if (text === "📂 Проєкти") return sendTelegramProjects(env, telegramId);
+  if (text === "🌿 Відкрити планувальник") return sendTelegramPlannerButton(env, telegramId);
 
   await telegramApi(env, "sendMessage", {
     chat_id: telegramId,
@@ -1344,4 +1361,3 @@ export default {
     ctx.waitUntil(processDueReminders(env));
   },
 };
-
