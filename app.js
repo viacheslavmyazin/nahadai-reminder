@@ -72,6 +72,68 @@ async function syncReminder(item){await api("/api/reminders",{method:"POST",body
 async function deleteRemote(id){await api("/api/reminders/"+encodeURIComponent(id),{method:"DELETE"});saveCache()}
 function repeatLabel(item){const n=Number(item.recurrenceInterval)||1,labels={daily:n===1?"Щодня":`Кожні ${n} дні`,weekdays:"Робочі дні",weekly:n===1?"Щотижня":`Кожні ${n} тижні`,monthly:n===1?"Щомісяця":`Кожні ${n} місяці`};return labels[item.recurrenceType]||""}
 function statusLabel(status){return status==="in_progress"?"У роботі":status==="done"?"Виконано":"Заплановано"}
+function updateSummaryDashboard(){
+ const now=new Date();
+ const currentDateTime=now.getTime();
+
+ const activeItems=reminders.filter(item=>!item.done);
+
+ const todayItems=activeItems.filter(item=>item.date===today);
+
+ const overdueItems=activeItems.filter(item=>{
+  const dueDateTime=new Date(`${item.date}T${item.time}`).getTime();
+  return Number.isFinite(dueDateTime)&&dueDateTime<currentDateTime;
+ });
+
+ const doneItems=reminders.filter(item=>item.done);
+
+ q("#active-count").textContent=activeItems.length;
+ q("#today-summary-count").textContent=todayItems.length;
+ q("#overdue-count").textContent=overdueItems.length;
+ q("#done-summary-count").textContent=doneItems.length;
+
+ const hour=now.getHours();
+
+ let greeting="Добрий вечір";
+
+ if(hour>=5&&hour<12){
+  greeting="Доброго ранку";
+ }else if(hour>=12&&hour<18){
+  greeting="Добрий день";
+ }
+
+ const userName=currentUser?.name?.trim().split(/\s+/)[0]||"";
+
+ q("#greeting").textContent=userName
+  ? `${greeting}, ${userName} 👋`
+  : `${greeting} 👋`;
+
+ if(overdueItems.length>0){
+  q("#summary-title").textContent=
+   `У вас ${overdueItems.length} прострочених справ`;
+
+  q("#summary-subtitle").textContent=
+   "Рекомендуємо почати з них, а потім перейти до запланованих справ.";
+ }else if(todayItems.length>0){
+  q("#summary-title").textContent=
+   `На сьогодні заплановано ${todayItems.length} справ`;
+
+  q("#summary-subtitle").textContent=
+   "Усі важливі задачі та нагадування зібрані в одному місці.";
+ }else if(activeItems.length>0){
+  q("#summary-title").textContent=
+   "На сьогодні термінових справ немає";
+
+  q("#summary-subtitle").textContent=
+   `У вас залишається ${activeItems.length} активних справ на наступні дні.`;
+ }else{
+  q("#summary-title").textContent=
+   "Усі справи виконані";
+
+  q("#summary-subtitle").textContent=
+   "Чудова робота. Можна додати нову задачу або нагадування.";
+ }
+}
 function render(){
  const visible=reminders.filter(r=>{const found=(r.title+" "+r.note).toLowerCase().includes(query.toLowerCase());if(!found)return false;if(filter==="today")return r.date===today&&!r.done;if(filter==="done")return r.done;if(filter==="tasks")return r.itemType==="task"&&!r.done;return r.itemType!=="task"&&!r.done}).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
  const groups=Object.groupBy?Object.groupBy(visible,r=>r.date):visible.reduce((all,r)=>((all[r.date]??=[]).push(r),all),{});
