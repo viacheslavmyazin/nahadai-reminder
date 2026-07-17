@@ -60,6 +60,34 @@ async function migrateLegacy(){
   try{await api("/api/reminders",{method:"POST",body:JSON.stringify(toRemote({...item,id,priority:item.priority||"medium"}))})}catch(error){console.warn("Migration failed",error)}}
  localStorage.setItem(marker,"1");localStorage.removeItem(LEGACY_STORE);await loadReminders();
 }
+async function loginFromTelegramMiniApp(){
+ const webApp=window.Telegram?.WebApp;
+ const initData=webApp?.initData;
+
+ if(!initData){
+  return false;
+ }
+
+ webApp.ready();
+ webApp.expand();
+
+ const data=await api(
+  "/api/auth/webapp",
+  {
+   method:"POST",
+   body:JSON.stringify({initData})
+  },
+  false
+ );
+
+ sessionToken=data.token;
+ currentUser=data.user;
+
+ localStorage.setItem(SESSION_STORE,sessionToken);
+ localStorage.setItem(USER_STORE,JSON.stringify(currentUser));
+
+ return true;
+}
 async function initializeAuth(){
  const params=new URLSearchParams(location.search),code=params.get("login_code"),authError=params.get("auth_error");
  if(code){try{q("#auth-message").textContent="Завершуємо вхід…";await exchangeLoginCode(code)}catch{clearSession();showAuth("Не вдалося завершити вхід. Спробуйте ще раз.")}finally{cleanAuthParameters()}}
