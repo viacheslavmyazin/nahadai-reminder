@@ -3,7 +3,27 @@
   "name": "nahadai-telegram",
   "main": "index.js",
   "compatibility_date": "2026-07-17",
+  "preview_urls": false,
+
+  "vars": {
+    "ALLOWED_ORIGIN": "https://viacheslavmyazin.github.io",
+    "APP_URL": "https://viacheslavmyazin.github.io/nahadai-reminder/",
+    "TELEGRAM_CLIENT_ID": "8840385088"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nahadai-reminders",
+      "database_id": "caf3a9c0-7d3b-4cd2-9e39-5245d1789d22"
+    }
+  ],
+
   "triggers": {
     "crons": ["* * * * *"]
+  },
+
+  "observability": {
+    "enabled": true
   }
 }
