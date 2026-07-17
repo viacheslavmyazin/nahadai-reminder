@@ -135,6 +135,8 @@ function updateSummaryDashboard(){
  }
 }
 function render(){
+ updateSummaryDashboard();
+ 
  const visible=reminders.filter(r=>{const found=(r.title+" "+r.note).toLowerCase().includes(query.toLowerCase());if(!found)return false;if(filter==="today")return r.date===today&&!r.done;if(filter==="done")return r.done;if(filter==="tasks")return r.itemType==="task"&&!r.done;return r.itemType!=="task"&&!r.done}).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
  const groups=Object.groupBy?Object.groupBy(visible,r=>r.date):visible.reduce((all,r)=>((all[r.date]??=[]).push(r),all),{});
  q("#today-count").textContent=reminders.filter(r=>r.date===today&&!r.done).length;q("#reminder-count").textContent=reminders.filter(r=>r.itemType!=="task"&&!r.done).length;q("#task-count").textContent=reminders.filter(r=>r.itemType==="task"&&!r.done).length;q("#done-count").textContent=reminders.filter(r=>r.done).length;q("#shown-count").textContent=visible.length;
