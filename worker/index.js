@@ -683,7 +683,7 @@ function telegramMainKeyboard(env) {
       [{ text: "📅 Сьогодні" }, { text: "📋 Активні" }],
       [{ text: "⚠️ Прострочені" }, { text: "➕ Нова задача" }],
       [{ text: "📂 Проєкти" }, { text: "📊 Статистика" }],
-      [{ text: "🌿 Відкрити планувальник" }],
+      [{ text: "🔍 Пошук" }, { text: "🌿 Відкрити планувальник" }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -759,7 +759,7 @@ async function sendTelegramMenu(env, telegramId, displayName = "") {
   });
 }
 
-async function sendTelegramTaskList(env, telegramId, mode) {
+async function sendTelegramTaskList(env, telegramId, mode, searchQuery = "") {
   const user = await telegramUserByChat(env, telegramId);
   if (!user) {
     await telegramApi(env, "sendMessage", {
@@ -790,6 +790,15 @@ async function sendTelegramTaskList(env, telegramId, mode) {
            FROM reminders WHERE user_id = ? AND done = 0 AND due_at < ?
            ORDER BY due_at ASC LIMIT 30`;
     args = [user.id, now];
+  } else if (mode === "search") {
+    const query = String(searchQuery || "").trim();
+    title = `🔍 <b>Пошук:</b> ${escapeHtml(query)}`;
+    sql = `SELECT id, title, note, due_at, priority, item_type, status, timezone
+           FROM reminders
+           WHERE user_id = ? AND (title LIKE ? OR note LIKE ?)
+           ORDER BY done ASC, due_at ASC LIMIT 30`;
+    const pattern = `%${query}%`;
+    args = [user.id, pattern, pattern];
   }
 
   const { results } = await env.DB.prepare(sql).bind(...args).all();
@@ -812,14 +821,23 @@ async function sendTelegramTaskList(env, telegramId, mode) {
     const date = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "2-digit", timeZone: zone }).format(due);
     const time = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone: zone }).format(due);
     const type = item.item_type === "task" ? "📋" : "🔔";
-    lines.push(`${index + 1}. ${telegramPriorityIcon(item.priority)} ${type} <b>${escapeHtml(item.title)}</b>`);
+    const statusIcon = item.status === "in_progress" ? "▶️" : "";
+    lines.push(`${index + 1}. ${telegramPriorityIcon(item.priority)} ${type} ${statusIcon} <b>${escapeHtml(item.title)}</b>`);
     lines.push(`   🕒 ${date}, ${time}`);
+    if (item.status === "in_progress") lines.push("   📌 У роботі");
     if (item.note) lines.push(`   📝 ${escapeHtml(item.note).slice(0, 140)}`);
     lines.push("");
     if (keyboard.length < 8) {
       keyboard.push([
-        { text: `✅ ${String(item.title).slice(0, 24)}`, callback_data: `done:${item.id}` },
-        { text: "📅 Завтра", callback_data: `tomorrow:${item.id}` },
+        { text: `✅ ${String(item.title).slice(0, 18)}`, callback_data: `done:${item.id}` },
+        { text: "▶️ У роботі", callback_data: `progress:${item.id}` },
+      ]);
+      keyboard.push([
+        { text: "✏️ Редагувати", callback_data: `edit:${item.id}` },
+        { text: "🗑 Видалити", callback_data: `delete:${item.id}` },
+      ]);
+      keyboard.push([
+        { text: "📅 На завтра", callback_data: `tomorrow:${item.id}` },
       ]);
     }
   }
@@ -915,7 +933,7 @@ function parseTelegramTime(text) {
 async function startTelegramTaskCreation(env, telegramId) {
   const user = await telegramUserByChat(env, telegramId);
   if (!user) return sendTelegramMenu(env, telegramId);
-  await setTelegramState(env, telegramId, { step: "title", userId: user.id });
+  await setTelegramState(env, telegramId, { mode: "create", step: "title", userId: user.id });
   await telegramApi(env, "sendMessage", {
     chat_id: telegramId,
     text: "➕ <b>Нова задача</b>\n\nНапишіть назву задачі.",
@@ -924,32 +942,102 @@ async function startTelegramTaskCreation(env, telegramId) {
   });
 }
 
+async function startTelegramSearch(env, telegramId) {
+  const user = await telegramUserByChat(env, telegramId);
+  if (!user) return sendTelegramMenu(env, telegramId);
+  await setTelegramState(env, telegramId, { mode: "search", step: "query", userId: user.id });
+  await telegramApi(env, "sendMessage", {
+    chat_id: telegramId,
+    text: "🔍 <b>Пошук</b>\n\nВведіть частину назви або нотатки.",
+    parse_mode: "HTML",
+    reply_markup: { keyboard: [[{ text: "❌ Скасувати" }]], resize_keyboard: true },
+  });
+}
+
+async function startTelegramEdit(env, telegramId, reminder) {
+  await setTelegramState(env, telegramId, {
+    mode: "edit",
+    step: "title",
+    userId: reminder.user_id,
+    reminderId: reminder.id,
+    existing: {
+      title: reminder.title,
+      note: reminder.note || "",
+      dueAt: Number(reminder.due_at),
+      priority: reminder.priority || "medium",
+      timezone: normalizeTimeZone(reminder.timezone || "Europe/Kyiv"),
+    },
+  });
+  await telegramApi(env, "sendMessage", {
+    chat_id: telegramId,
+    text: `✏️ <b>Редагування</b>\n\nПоточна назва: <b>${escapeHtml(reminder.title)}</b>\n\nВведіть нову назву або натисніть «Без змін».`,
+    parse_mode: "HTML",
+    reply_markup: { keyboard: [[{ text: "Без змін" }], [{ text: "❌ Скасувати" }]], resize_keyboard: true },
+  });
+}
+
 async function continueTelegramTaskCreation(env, message, state) {
   const telegramId = String(message.chat?.id || "");
   const text = String(message.text || "").trim();
   if (text === "❌ Скасувати" || /^\/cancel$/i.test(text)) {
     await setTelegramState(env, telegramId, null);
-    await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Створення скасовано.", reply_markup: telegramMainKeyboard(env) });
+    await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Дію скасовано.", reply_markup: telegramMainKeyboard(env) });
+    return;
+  }
+
+  if (state.mode === "search" && state.step === "query") {
+    if (!text) {
+      await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Введіть текст для пошуку." });
+      return;
+    }
+    await setTelegramState(env, telegramId, null);
+    await sendTelegramTaskList(env, telegramId, "search", text);
     return;
   }
 
   if (state.step === "title") {
-    if (!text || text.length > 120) {
+    const title = state.mode === "edit" && text === "Без змін" ? state.existing.title : text;
+    if (!title || title.length > 120) {
       await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Введіть назву до 120 символів." });
       return;
     }
-    await setTelegramState(env, telegramId, { ...state, step: "date", title: text });
+    await setTelegramState(env, telegramId, { ...state, step: "note", title });
+    await telegramApi(env, "sendMessage", {
+      chat_id: telegramId,
+      text: state.mode === "edit"
+        ? "📝 Введіть нову нотатку або натисніть «Без змін»."
+        : "📝 Додайте нотатку або натисніть «Пропустити».",
+      reply_markup: { keyboard: [[{ text: state.mode === "edit" ? "Без змін" : "Пропустити" }], [{ text: "❌ Скасувати" }]], resize_keyboard: true },
+    });
+    return;
+  }
+
+  if (state.step === "note") {
+    const note = state.mode === "edit" && text === "Без змін"
+      ? state.existing.note
+      : text === "Пропустити" ? "" : text;
+    if (note.length > 500) {
+      await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Нотатка має бути до 500 символів." });
+      return;
+    }
+    await setTelegramState(env, telegramId, { ...state, step: "date", note });
     await telegramApi(env, "sendMessage", {
       chat_id: telegramId,
       text: "📅 Коли виконати задачу?\n\nОберіть кнопку або введіть дату у форматі <b>ДД.ММ.РРРР</b>.",
       parse_mode: "HTML",
-      reply_markup: { keyboard: [[{ text: "Сьогодні" }, { text: "Завтра" }], [{ text: "❌ Скасувати" }]], resize_keyboard: true },
+      reply_markup: { keyboard: [[{ text: "Сьогодні" }, { text: "Завтра" }], ...(state.mode === "edit" ? [[{ text: "Без змін" }]] : []), [{ text: "❌ Скасувати" }]], resize_keyboard: true },
     });
     return;
   }
 
   if (state.step === "date") {
-    const date = parseTelegramDate(text);
+    let date;
+    if (state.mode === "edit" && text === "Без змін") {
+      const parts = zonedParts(state.existing.dueAt, state.existing.timezone);
+      date = { year: parts.year, month: parts.month, day: parts.day };
+    } else {
+      date = parseTelegramDate(text);
+    }
     if (!date) {
       await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Не розпізнав дату. Приклад: 18.07.2026" });
       return;
@@ -959,13 +1047,19 @@ async function continueTelegramTaskCreation(env, message, state) {
       chat_id: telegramId,
       text: "⏰ Введіть час у форматі <b>ГГ:ХХ</b>, наприклад 09:30.",
       parse_mode: "HTML",
-      reply_markup: { keyboard: [[{ text: "09:00" }, { text: "12:00" }, { text: "18:00" }], [{ text: "❌ Скасувати" }]], resize_keyboard: true },
+      reply_markup: { keyboard: [[{ text: "09:00" }, { text: "12:00" }, { text: "18:00" }], ...(state.mode === "edit" ? [[{ text: "Без змін" }]] : []), [{ text: "❌ Скасувати" }]], resize_keyboard: true },
     });
     return;
   }
 
   if (state.step === "time") {
-    const time = parseTelegramTime(text);
+    let time;
+    if (state.mode === "edit" && text === "Без змін") {
+      const parts = zonedParts(state.existing.dueAt, state.existing.timezone);
+      time = { hour: parts.hour, minute: parts.minute };
+    } else {
+      time = parseTelegramTime(text);
+    }
     if (!time) {
       await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Не розпізнав час. Приклад: 14:30" });
       return;
@@ -974,38 +1068,48 @@ async function continueTelegramTaskCreation(env, message, state) {
     await telegramApi(env, "sendMessage", {
       chat_id: telegramId,
       text: "Оберіть критичність:",
-      reply_markup: { keyboard: [[{ text: "🔴 Висока" }, { text: "🟡 Середня" }, { text: "🟢 Низька" }], [{ text: "❌ Скасувати" }]], resize_keyboard: true },
+      reply_markup: { keyboard: [[{ text: "🔴 Висока" }, { text: "🟡 Середня" }, { text: "🟢 Низька" }], ...(state.mode === "edit" ? [[{ text: "Без змін" }]] : []), [{ text: "❌ Скасувати" }]], resize_keyboard: true },
     });
     return;
   }
 
   if (state.step === "priority") {
-    const priority = text.startsWith("🔴") ? "high" : text.startsWith("🟢") ? "low" : text.startsWith("🟡") ? "medium" : null;
+    const priority = state.mode === "edit" && text === "Без змін"
+      ? state.existing.priority
+      : text.startsWith("🔴") ? "high" : text.startsWith("🟢") ? "low" : text.startsWith("🟡") ? "medium" : null;
     if (!priority) {
       await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Оберіть критичність кнопкою нижче." });
       return;
     }
-    const zone = "Europe/Kyiv";
+    const zone = state.mode === "edit" ? state.existing.timezone : "Europe/Kyiv";
     const dueAt = localPartsToTimestamp({ ...state.date, ...state.time, second: 0 }, zone);
     if (dueAt <= Date.now()) {
-      await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Дата й час уже минули. Почніть створення знову." , reply_markup: telegramMainKeyboard(env)});
-      await setTelegramState(env, telegramId, null);
+      await telegramApi(env, "sendMessage", { chat_id: telegramId, text: "Дата й час уже минули. Виберіть майбутній час." });
       return;
     }
-    const id = crypto.randomUUID();
     const now = Date.now();
-    await env.DB.prepare(`
-      INSERT INTO reminders
-        (id, user_id, title, note, due_at, priority, done, sent, item_type, status,
-         recurrence_type, recurrence_interval, timezone, created_at, updated_at)
-      VALUES (?, ?, ?, '', ?, ?, 0, 0, 'task', 'planned', 'none', 1, ?, ?, ?)
-    `).bind(id, state.userId, state.title, dueAt, priority, zone, now, now).run();
+    if (state.mode === "edit") {
+      await env.DB.prepare(`
+        UPDATE reminders SET title = ?, note = ?, due_at = ?, priority = ?, sent = 0,
+          done = 0, status = CASE WHEN status = 'done' THEN 'planned' ELSE status END,
+          updated_at = ?
+        WHERE id = ? AND user_id = ?
+      `).bind(state.title, state.note || "", dueAt, priority, now, state.reminderId, state.userId).run();
+    } else {
+      const id = crypto.randomUUID();
+      await env.DB.prepare(`
+        INSERT INTO reminders
+          (id, user_id, title, note, due_at, priority, done, sent, item_type, status,
+           recurrence_type, recurrence_interval, timezone, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'task', 'planned', 'none', 1, ?, ?, ?)
+      `).bind(id, state.userId, state.title, state.note || "", dueAt, priority, zone, now, now).run();
+    }
     await setTelegramState(env, telegramId, null);
     const date = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeZone: zone }).format(new Date(dueAt));
     const time = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone: zone }).format(new Date(dueAt));
     await telegramApi(env, "sendMessage", {
       chat_id: telegramId,
-      text: `✅ <b>Задачу створено</b>\n\n${telegramPriorityIcon(priority)} <b>${escapeHtml(state.title)}</b>\n📅 ${date}\n⏰ ${time}`,
+      text: `${state.mode === "edit" ? "✅ <b>Задачу оновлено</b>" : "✅ <b>Задачу створено</b>"}\n\n${telegramPriorityIcon(priority)} <b>${escapeHtml(state.title)}</b>${state.note ? `\n📝 ${escapeHtml(state.note)}` : ""}\n📅 ${date}\n⏰ ${time}`,
       parse_mode: "HTML",
       reply_markup: telegramMainKeyboard(env),
     });
@@ -1027,6 +1131,7 @@ async function handleTelegramMessageV2(env, message) {
   if (text === "➕ Нова задача") return startTelegramTaskCreation(env, telegramId);
   if (text === "📊 Статистика") return sendTelegramStatistics(env, telegramId);
   if (text === "📂 Проєкти") return sendTelegramProjects(env, telegramId);
+  if (text === "🔍 Пошук") return startTelegramSearch(env, telegramId);
   if (text === "🌿 Відкрити планувальник") return sendTelegramPlannerButton(env, telegramId);
 
   await telegramApi(env, "sendMessage", {
@@ -1063,8 +1168,8 @@ async function handleReminderCallback(env, callbackQuery) {
   if (!callbackId || !chatId || !messageId || !reminderId) return;
 
   const reminder = await env.DB.prepare(
-    `SELECT r.id, r.user_id, r.title, r.note, r.due_at, r.done, r.sent, r.status, r.timezone,
-            u.telegram_id
+    `SELECT r.id, r.user_id, r.title, r.note, r.due_at, r.done, r.sent, r.status,
+            r.priority, r.timezone, u.telegram_id
      FROM reminders r JOIN users u ON u.id = r.user_id
      WHERE r.id = ? AND u.telegram_id = ?`,
   ).bind(reminderId, chatId).first();
@@ -1080,10 +1185,41 @@ async function handleReminderCallback(env, callbackQuery) {
     await env.DB.prepare(
       "UPDATE reminders SET done = 1, sent = 1, status = 'done', updated_at = ? WHERE id = ? AND user_id = ?",
     ).bind(now, reminder.id, reminder.user_id).run();
-    message = `✅ <b>Виконано</b>
-
-${escapeHtml(reminder.title)}`;
+    message = `✅ <b>Виконано</b>\n\n${escapeHtml(reminder.title)}`;
     await answerCallback(env, callbackId, "Позначено виконаним");
+  } else if (action === "progress") {
+    await env.DB.prepare(
+      "UPDATE reminders SET done = 0, status = 'in_progress', updated_at = ? WHERE id = ? AND user_id = ?",
+    ).bind(now, reminder.id, reminder.user_id).run();
+    message = `▶️ <b>Задача у роботі</b>\n\n${escapeHtml(reminder.title)}`;
+    await answerCallback(env, callbackId, "Статус: у роботі");
+  } else if (action === "edit") {
+    await answerCallback(env, callbackId, "Починаємо редагування");
+    await startTelegramEdit(env, chatId, reminder);
+    return;
+  } else if (action === "delete") {
+    await answerCallback(env, callbackId, "Потрібне підтвердження");
+    await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: `🗑 Видалити задачу?\n\n<b>${escapeHtml(reminder.title)}</b>`,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "Так, видалити", callback_data: `confirmdelete:${reminder.id}` },
+          { text: "Скасувати", callback_data: `canceldelete:${reminder.id}` },
+        ]],
+      },
+    });
+    return;
+  } else if (action === "confirmdelete") {
+    await env.DB.prepare("DELETE FROM reminders WHERE id = ? AND user_id = ?")
+      .bind(reminder.id, reminder.user_id).run();
+    message = `🗑 <b>Задачу видалено</b>\n\n${escapeHtml(reminder.title)}`;
+    await answerCallback(env, callbackId, "Видалено");
+  } else if (action === "canceldelete") {
+    await answerCallback(env, callbackId, "Видалення скасовано");
+    await editTelegramMessage(env, chatId, messageId, `↩️ <b>Видалення скасовано</b>\n\n${escapeHtml(reminder.title)}`);
+    return;
   } else if (action === "delay10" || action === "delay60") {
     const minutes = action === "delay10" ? 10 : 60;
     const nextDueAt = now + minutes * 60 * 1000;
@@ -1094,11 +1230,7 @@ ${escapeHtml(reminder.title)}`;
     const nextTime = new Intl.DateTimeFormat("uk-UA", {
       hour: "2-digit", minute: "2-digit", timeZone,
     }).format(new Date(nextDueAt));
-    message = `⏱ <b>Відкладено</b>
-
-${escapeHtml(reminder.title)}
-
-Нове нагадування о <b>${nextTime}</b>`;
+    message = `⏱ <b>Відкладено</b>\n\n${escapeHtml(reminder.title)}\n\nНове нагадування о <b>${nextTime}</b>`;
     await answerCallback(env, callbackId, `Відкладено на ${minutes} хв`);
   } else if (action === "tomorrow") {
     const timeZone = normalizeTimeZone(reminder.timezone);
@@ -1110,11 +1242,7 @@ ${escapeHtml(reminder.title)}
     ).bind(nextDueAt, now, reminder.id, reminder.user_id).run();
     const date = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeZone }).format(new Date(nextDueAt));
     const time = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(nextDueAt));
-    message = `📅 <b>Перенесено</b>
-
-${escapeHtml(reminder.title)}
-
-Нова дата: <b>${date}, ${time}</b>`;
+    message = `📅 <b>Перенесено</b>\n\n${escapeHtml(reminder.title)}\n\nНова дата: <b>${date}, ${time}</b>`;
     await answerCallback(env, callbackId, "Перенесено на завтра");
   } else {
     await answerCallback(env, callbackId, "Невідома дія", true);
