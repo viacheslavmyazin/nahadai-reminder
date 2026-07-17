@@ -89,12 +89,66 @@ async function loginFromTelegramMiniApp(){
  return true;
 }
 async function initializeAuth(){
- const params=new URLSearchParams(location.search),code=params.get("login_code"),authError=params.get("auth_error");
- if(code){try{q("#auth-message").textContent="Завершуємо вхід…";await exchangeLoginCode(code)}catch{clearSession();showAuth("Не вдалося завершити вхід. Спробуйте ще раз.")}finally{cleanAuthParameters()}}
- else if(authError){clearSession();showAuth("Telegram не підтвердив вхід. Спробуйте ще раз.");cleanAuthParameters()}
- if(sessionToken){try{const data=await api("/api/me");currentUser=data.user;localStorage.setItem(USER_STORE,JSON.stringify(currentUser))}catch(error){if(error.status!==401&&currentUser)console.warn("Account check unavailable",error)}}
- if(!sessionToken||!currentUser){reminders=[];render();showAuth();return}
- hideAuth();updateAccountUI();await loadReminders();await migrateLegacy();render();await refreshBotConnection(true);
+ const params=new URLSearchParams(location.search);
+ const code=params.get("login_code");
+ const authError=params.get("auth_error");
+
+ if(!sessionToken&&window.Telegram?.WebApp?.initData){
+  try{
+   q("#auth-message").textContent="Входимо через Telegram…";
+   await loginFromTelegramMiniApp();
+  }catch(error){
+   console.error("Mini App login failed",error);
+  }
+ }
+
+ if(!sessionToken&&code){
+  try{
+   q("#auth-message").textContent="Завершуємо вхід…";
+   await exchangeLoginCode(code);
+  }catch{
+   clearSession();
+   showAuth("Не вдалося завершити вхід. Спробуйте ще раз.");
+  }finally{
+   cleanAuthParameters();
+  }
+ }else if(authError){
+  clearSession();
+  showAuth("Telegram не підтвердив вхід. Спробуйте ще раз.");
+  cleanAuthParameters();
+ }
+
+ if(sessionToken){
+  try{
+   const data=await api("/api/me");
+   currentUser=data.user;
+   localStorage.setItem(USER_STORE,JSON.stringify(currentUser));
+  }catch(error){
+   if(error.status!==401&&currentUser){
+    console.warn("Account check unavailable",error);
+   }
+  }
+ }
+
+ if(!sessionToken||!currentUser){
+  reminders=[];
+  render();
+
+  if(window.Telegram?.WebApp?.initData){
+   showAuth("Не вдалося увійти через Telegram Mini App. Перевірте маршрут /api/auth/webapp у Worker.");
+  }else{
+   showAuth();
+  }
+
+  return;
+ }
+
+ hideAuth();
+ updateAccountUI();
+ await loadReminders();
+ await migrateLegacy();
+ render();
+ await refreshBotConnection(true);
 }
 async function syncReminder(item){await api("/api/reminders",{method:"POST",body:JSON.stringify(toRemote(item))});saveCache()}
 async function deleteRemote(id){await api("/api/reminders/"+encodeURIComponent(id),{method:"DELETE"});saveCache()}
@@ -378,5 +432,3 @@ async function checkBrowserReminders(){
 }
 setInterval(checkBrowserReminders,60000);
 render();initializeAuth();
-
-
