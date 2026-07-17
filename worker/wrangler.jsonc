@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nahadai-telegram",
+  "main": "index.js",
+  "compatibility_date": "2026-07-17",
+  "triggers": {
+    "crons": ["* * * * *"]
+  }
+}
