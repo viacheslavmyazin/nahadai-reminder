@@ -94,6 +94,36 @@ function activateFilter(nextFilter){
 
  render();
 }
+function getNextReminder(){
+ const now=Date.now();
+
+ return reminders
+  .filter(item=>!item.done)
+  .map(item=>({
+    ...item,
+    due:new Date(`${item.date}T${item.time}`).getTime()
+  }))
+  .filter(item=>Number.isFinite(item.due)&&item.due>=now)
+  .sort((a,b)=>a.due-b.due)[0]||null;
+}
+
+function formatRemaining(ms){
+ const totalMinutes=Math.floor(ms/60000);
+
+ const days=Math.floor(totalMinutes/1440);
+ const hours=Math.floor((totalMinutes%1440)/60);
+ const minutes=totalMinutes%60;
+
+ if(days>0){
+  return `через ${days} дн. ${hours} год.`;
+ }
+
+ if(hours>0){
+  return `через ${hours} год. ${minutes} хв.`;
+ }
+
+ return `через ${Math.max(1,minutes)} хв.`;
+}
 function updateSummaryDashboard(){
  const now=new Date();
  const currentDateTime=now.getTime();
@@ -141,13 +171,29 @@ const overdueItems=activeItems.filter(item=>
 
   q("#summary-subtitle").textContent=
    "Усі важливі задачі та нагадування зібрані в одному місці.";
- }else if(activeItems.length>0){
-  q("#summary-title").textContent=
-   "На сьогодні термінових справ немає";
+}else if(activeItems.length>0){
 
-  q("#summary-subtitle").textContent=
-   `У вас залишається ${activeItems.length} активних справ на наступні дні.`;
+ const next=getNextReminder();
+
+ if(next){
+
+   q("#summary-title").textContent=
+    next.title;
+
+   q("#summary-subtitle").textContent=
+    `${next.time} • ${formatRemaining(next.due-currentDateTime)}`;
+
  }else{
+
+   q("#summary-title").textContent=
+    "На сьогодні термінових справ немає";
+
+   q("#summary-subtitle").textContent=
+    `У вас ${activeItems.length} активних справ.`;
+
+ }
+
+}else{
   q("#summary-title").textContent=
    "Усі справи виконані";
 
