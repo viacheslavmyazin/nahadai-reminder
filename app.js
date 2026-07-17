@@ -72,6 +72,28 @@ async function syncReminder(item){await api("/api/reminders",{method:"POST",body
 async function deleteRemote(id){await api("/api/reminders/"+encodeURIComponent(id),{method:"DELETE"});saveCache()}
 function repeatLabel(item){const n=Number(item.recurrenceInterval)||1,labels={daily:n===1?"Щодня":`Кожні ${n} дні`,weekdays:"Робочі дні",weekly:n===1?"Щотижня":`Кожні ${n} тижні`,monthly:n===1?"Щомісяця":`Кожні ${n} місяці`};return labels[item.recurrenceType]||""}
 function statusLabel(status){return status==="in_progress"?"У роботі":status==="done"?"Виконано":"Заплановано"}
+function isOverdue(item,now=Date.now()){
+ if(item.done)return false;
+
+ const dueDateTime=new Date(`${item.date}T${item.time}`).getTime();
+
+ return Number.isFinite(dueDateTime)&&dueDateTime<now;
+}
+
+function activateFilter(nextFilter){
+ filter=nextFilter;
+ query="";
+ q("#search").value="";
+
+ qa(".sidebar nav button").forEach(button=>{
+  button.classList.toggle(
+   "active",
+   button.dataset.filter===nextFilter
+  );
+ });
+
+ render();
+}
 function updateSummaryDashboard(){
  const now=new Date();
  const currentDateTime=now.getTime();
@@ -80,10 +102,9 @@ function updateSummaryDashboard(){
 
  const todayItems=activeItems.filter(item=>item.date===today);
 
- const overdueItems=activeItems.filter(item=>{
-  const dueDateTime=new Date(`${item.date}T${item.time}`).getTime();
-  return Number.isFinite(dueDateTime)&&dueDateTime<currentDateTime;
- });
+const overdueItems=activeItems.filter(item=>
+ isOverdue(item,currentDateTime)
+);
 
  const doneItems=reminders.filter(item=>item.done);
 
@@ -137,10 +158,39 @@ function updateSummaryDashboard(){
 function render(){
  updateSummaryDashboard();
  
- const visible=reminders.filter(r=>{const found=(r.title+" "+r.note).toLowerCase().includes(query.toLowerCase());if(!found)return false;if(filter==="today")return r.date===today&&!r.done;if(filter==="done")return r.done;if(filter==="tasks")return r.itemType==="task"&&!r.done;return r.itemType!=="task"&&!r.done}).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
- const groups=Object.groupBy?Object.groupBy(visible,r=>r.date):visible.reduce((all,r)=>((all[r.date]??=[]).push(r),all),{});
+ const visible=reminders.filter(item=>{
+ const found=(item.title+" "+item.note)
+  .toLowerCase()
+  .includes(query.toLowerCase());
+
+ if(!found)return false;
+
+ if(filter==="active"){
+  return !item.done;
+ }
+
+ if(filter==="today"){
+  return item.date===today&&!item.done;
+ }
+
+ if(filter==="overdue"){
+  return isOverdue(item);
+ }
+
+ if(filter==="done"){
+  return item.done;
+ }
+
+ if(filter==="tasks"){
+  return item.itemType==="task"&&!item.done;
+ }
+
+ return item.itemType!=="task"&&!item.done;
+}).sort((a,b)=>
+ (a.date+a.time).localeCompare(b.date+b.time)
+);
  q("#today-count").textContent=reminders.filter(r=>r.date===today&&!r.done).length;q("#reminder-count").textContent=reminders.filter(r=>r.itemType!=="task"&&!r.done).length;q("#task-count").textContent=reminders.filter(r=>r.itemType==="task"&&!r.done).length;q("#done-count").textContent=reminders.filter(r=>r.done).length;q("#shown-count").textContent=visible.length;
- const labels={reminders:["ВАШІ НАГАДУВАННЯ","Нагадування"],tasks:["ПЛАНУВАННЯ РОБОТИ","Задачі"],today:["НА СЬОГОДНІ","Ваш день"],done:["АРХІВ","Виконані"]};[q("#section-kicker").textContent,q("#section-name").textContent]=labels[filter]||labels.reminders;
+ const labels={  reminders:["ВАШІ НАГАДУВАННЯ","Нагадування"],  tasks:["ПЛАНУВАННЯ РОБОТИ","Задачі"],  active:["УСІ ВІДКРИТІ СПРАВИ","Активні"],  today:["НА СЬОГОДНІ","Ваш день"],  overdue:["ПОТРЕБУЮТЬ УВАГИ","Прострочені"],  done:["АРХІВ","Виконані"] };[q("#section-kicker").textContent,q("#section-name").textContent]=labels[filter]||labels.reminders;
  q("#reminders").innerHTML=visible.length?Object.entries(groups).map(([date,items])=>`
   <div class="day-group"><div class="day-heading"><strong>${prettyDay(date)}</strong><span>${weekday(date)}</span></div>
   ${items.map(r=>{const repeat=repeatLabel(r),isTask=r.itemType==="task";return `<article class="reminder-card ${r.done?"done":""} ${isTask?"task-card":""}" data-id="${esc(r.id)}">
@@ -175,7 +225,25 @@ q("#reminder-form").onsubmit=async e=>{
  if(editingId){reminders=reminders.map(r=>r.id===editingId?{...r,...data,notified:false}:r);saved=reminders.find(r=>r.id===editingId)}else{saved={id:crypto.randomUUID(),...data,notified:false};reminders.push(saved)}
  saveCache();closeModal();render();try{await syncReminder(saved);notify("Готово!",saved.itemType==="task"?"Задачу збережено":"Нагадування збережено")}catch{notify("Не синхронізовано","Перевірте інтернет і повторіть редагування",false)}
 };
-q(".sidebar nav").onclick=e=>{const b=e.target.closest("[data-filter]");if(!b)return;filter=b.dataset.filter;qa(".sidebar nav button").forEach(x=>x.classList.toggle("active",x===b));render()};
+q(".sidebar nav").onclick=e=>{  const button=e.target.closest("[data-filter]");   if(!button)return;   activateFilter(button.dataset.filter); };
+q(".summary-grid").onclick=e=>{
+ const card=e.target.closest("[data-summary-filter]");
+
+ if(!card)return;
+
+ activateFilter(card.dataset.summaryFilter);
+};
+
+q(".summary-grid").onkeydown=e=>{
+ const card=e.target.closest("[data-summary-filter]");
+
+ if(!card)return;
+
+ if(e.key==="Enter"||e.key===" "){
+  e.preventDefault();
+  activateFilter(card.dataset.summaryFilter);
+ }
+};
 q("#search").oninput=e=>{query=e.target.value;render()};
 q("#reminders").onclick=async e=>{
  const action=e.target.closest("[data-action]");if(!action)return;const card=action.closest(".reminder-card"),id=card.dataset.id,item=reminders.find(r=>String(r.id)===id);if(!item)return;
