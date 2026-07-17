@@ -80,6 +80,15 @@ function isOverdue(item,now=Date.now()){
  return Number.isFinite(dueDateTime)&&dueDateTime<now;
 }
 
+function updateSummarySelection(){
+ qa(".summary-grid [data-summary-filter]").forEach(card=>{
+  card.classList.toggle(
+   "active-summary",
+   card.dataset.summaryFilter===filter
+  );
+ });
+}
+
 function activateFilter(nextFilter){
  filter=nextFilter;
  query="";
@@ -92,6 +101,7 @@ function activateFilter(nextFilter){
   );
  });
 
+ updateSummarySelection();
  render();
 }
 function getNextReminder(){
@@ -140,6 +150,37 @@ function updateSummaryDashboard(){
  q("#overdue-count").textContent=overdueItems.length;
  q("#done-summary-count").textContent=doneItems.length;
 
+ const todayAllItems=reminders.filter(item=>item.date===today);
+ const todayDoneItems=todayAllItems.filter(item=>item.done);
+ const todayProgress=todayAllItems.length
+  ? Math.round(todayDoneItems.length/todayAllItems.length*100)
+  : 0;
+
+ let progress=q("#day-progress");
+
+ if(!progress){
+  progress=document.createElement("div");
+  progress.id="day-progress";
+  progress.className="day-progress";
+  progress.innerHTML=`
+   <div class="day-progress-head">
+    <span id="day-progress-label"></span>
+    <strong id="day-progress-percent"></strong>
+   </div>
+   <div class="day-progress-track">
+    <span id="day-progress-bar"></span>
+   </div>
+  `;
+  q("#summary-subtitle").insertAdjacentElement("afterend",progress);
+ }
+
+ q("#day-progress-label").textContent=todayAllItems.length
+  ? `Виконано ${todayDoneItems.length} із ${todayAllItems.length} справ на сьогодні`
+  : "На сьогодні справ немає";
+
+ q("#day-progress-percent").textContent=`${todayProgress}%`;
+ q("#day-progress-bar").style.width=`${todayProgress}%`;
+
  const hour=now.getHours();
  let greeting="Добрий вечір";
 
@@ -180,6 +221,7 @@ function updateSummaryDashboard(){
 }
 function render(){
  updateSummaryDashboard();
+ updateSummarySelection();
  
  const visible=reminders.filter(item=>{
  const found=(item.title+" "+item.note)
@@ -308,12 +350,5 @@ async function checkBrowserReminders(){
 }
 setInterval(checkBrowserReminders,60000);
 render();initializeAuth();
-
-
-
-
-
-
-
 
 
