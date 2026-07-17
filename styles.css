@@ -167,3 +167,131 @@
 .summary-item:active{
   transform:translateY(0);
 }
+
+/* ===== Dashboard: кольорові картки та активний фільтр ===== */
+
+.summary-grid [data-summary-filter]{
+ cursor:pointer;
+ position:relative;
+ overflow:hidden;
+ transition:
+  transform .2s ease,
+  box-shadow .2s ease,
+  border-color .2s ease,
+  opacity .2s ease;
+}
+
+.summary-grid [data-summary-filter]::after{
+ content:"";
+ position:absolute;
+ inset:auto -28px -34px auto;
+ width:110px;
+ height:110px;
+ border-radius:50%;
+ opacity:.12;
+ pointer-events:none;
+}
+
+.summary-grid [data-summary-filter="active"]{
+ background:linear-gradient(145deg,#f3f8ff 0%,#ffffff 72%);
+ border-color:#cbdcf3;
+}
+
+.summary-grid [data-summary-filter="active"]::after{
+ background:#4385d1;
+}
+
+.summary-grid [data-summary-filter="today"]{
+ background:linear-gradient(145deg,#fff9e8 0%,#ffffff 72%);
+ border-color:#ead9aa;
+}
+
+.summary-grid [data-summary-filter="today"]::after{
+ background:#d6a126;
+}
+
+.summary-grid [data-summary-filter="overdue"]{
+ background:linear-gradient(145deg,#fff1f1 0%,#ffffff 72%);
+ border-color:#ecc7c7;
+}
+
+.summary-grid [data-summary-filter="overdue"]::after{
+ background:#d94c5c;
+}
+
+.summary-grid [data-summary-filter="done"]{
+ background:linear-gradient(145deg,#eef9f3 0%,#ffffff 72%);
+ border-color:#c7e1d2;
+}
+
+.summary-grid [data-summary-filter="done"]::after{
+ background:#36a06c;
+}
+
+.summary-grid [data-summary-filter]:hover{
+ transform:translateY(-4px);
+ box-shadow:0 14px 30px rgba(37,58,48,.11);
+}
+
+.summary-grid [data-summary-filter].active-summary{
+ transform:translateY(-3px);
+ border-color:#1f5b46;
+ box-shadow:
+  0 0 0 3px rgba(31,91,70,.13),
+  0 14px 30px rgba(37,58,48,.12);
+}
+
+.summary-grid [data-summary-filter]:focus-visible{
+ outline:3px solid rgba(31,91,70,.28);
+ outline-offset:3px;
+}
+
+/* ===== Прогрес дня у зеленому блоці ===== */
+
+.day-progress{
+ margin-top:18px;
+ max-width:560px;
+}
+
+.day-progress-head{
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:16px;
+ margin-bottom:8px;
+ color:rgba(255,255,255,.88);
+ font-size:13px;
+}
+
+.day-progress-head strong{
+ color:#ffffff;
+ font-size:14px;
+}
+
+.day-progress-track{
+ height:8px;
+ overflow:hidden;
+ border-radius:999px;
+ background:rgba(255,255,255,.18);
+}
+
+#day-progress-bar{
+ display:block;
+ width:0;
+ height:100%;
+ border-radius:inherit;
+ background:#f2c66d;
+ transition:width .45s ease;
+}
+
+@media (max-width:700px){
+ .day-progress{
+  max-width:none;
+ }
+
+ .day-progress-head{
+  align-items:flex-start;
+  flex-direction:column;
+  gap:4px;
+ }
+}
