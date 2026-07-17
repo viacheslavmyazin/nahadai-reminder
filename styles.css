@@ -17,3 +17,140 @@
 /* Reminders + task planning */
 .item-type-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}.item-type-options button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px;font-size:11px;font-weight:700}.item-type-options button.selected{border-color:#5f816f;background:#eaf2ed;color:var(--green);box-shadow:0 0 0 2px #5f816f14}.modal select{width:100%;border:1px solid #dedcd4;background:#fff;border-radius:8px;padding:11px 12px;outline:0}.modal select:focus{border-color:#7b9989;box-shadow:0 0 0 3px #7b99891a}.recurrence-row label{margin-bottom:8px}.recurrence-row small{color:#89938c;font-weight:400}.card-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:6px}.item-badge,.status-badge,.repeat-badge{display:inline-flex;align-items:center;border-radius:20px;padding:3px 7px;font-size:8px;font-weight:700;letter-spacing:.2px}.item-badge.reminder{background:#edf2ec;color:#4c6c5a}.item-badge.task{background:#e8eef5;color:#45627d}.status-badge{background:#f0eee8;color:#746d60}.status-badge.in_progress{background:#fff0d8;color:#986b22}.status-badge.done{background:#dce9e1;color:#3e7258}.repeat-badge{background:#f4e9d8;color:#966a2c}.task-card{border-left:3px solid #7891a8}.task-card .check-btn{border-radius:6px}.type-fieldset{margin-bottom:15px!important}
 @media(max-width:650px){.sidebar nav button{padding:5px 2px}.sidebar nav i{font-size:8px}.item-type-options button{min-height:44px}.recurrence-row{grid-template-columns:1fr}.card-meta{margin-bottom:5px}.item-badge,.status-badge,.repeat-badge{font-size:7px}}
+
+/* =====================================
+   SUMMARY DASHBOARD
+===================================== */
+
+.summary-dashboard{
+  margin:0 0 28px;
+}
+
+.welcome-card{
+  background:linear-gradient(135deg,#244c3b 0%,#315f4b 100%);
+  border-radius:18px;
+  padding:24px 26px;
+  margin-bottom:16px;
+  color:#fff;
+  box-shadow:0 12px 34px #244c3b24;
+}
+
+.summary-kicker{
+  display:block;
+  margin-bottom:8px;
+  color:#e5c98f;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+}
+
+.welcome-card h2{
+  margin:0;
+  max-width:700px;
+  color:#fff;
+  font-size:24px;
+  line-height:1.25;
+  letter-spacing:-.4px;
+}
+
+.welcome-card p{
+  margin:8px 0 0;
+  color:#d9e4de;
+  font-size:12px;
+}
+
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+}
+
+.summary-item{
+  min-height:112px;
+  padding:17px;
+  background:#faf9f5;
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:0 8px 26px #3042340a;
+  transition:.2s;
+}
+
+.summary-item:hover{
+  transform:translateY(-2px);
+  border-color:#bdc9c0;
+  box-shadow:0 12px 30px #30423412;
+}
+
+.summary-item>span{
+  display:grid;
+  place-items:center;
+  width:32px;
+  height:32px;
+  margin-bottom:12px;
+  border-radius:9px;
+  background:#edf0ea;
+  font-size:16px;
+}
+
+.summary-item strong{
+  display:block;
+  color:#273b31;
+  font-size:25px;
+  line-height:1;
+}
+
+.summary-item small{
+  display:block;
+  margin-top:7px;
+  color:#7f8a83;
+  font-size:10px;
+  font-weight:600;
+}
+
+#card-overdue>span{
+  background:#f4e7e3;
+}
+
+#card-done>span{
+  background:#dce9e1;
+}
+
+#card-today>span{
+  background:#f4e9d8;
+}
+
+@media(max-width:950px){
+  .summary-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:650px){
+  .summary-dashboard{
+    margin-bottom:18px;
+  }
+
+  .welcome-card{
+    padding:20px 18px;
+    border-radius:15px;
+  }
+
+  .welcome-card h2{
+    font-size:20px;
+  }
+
+  .summary-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+  }
+
+  .summary-item{
+    min-height:100px;
+    padding:14px;
+  }
+
+  .summary-item strong{
+    font-size:22px;
+  }
+}
