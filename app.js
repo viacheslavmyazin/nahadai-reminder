@@ -189,6 +189,12 @@ function render(){
 }).sort((a,b)=>
  (a.date+a.time).localeCompare(b.date+b.time)
 );
+ const groups=Object.groupBy
+ ? Object.groupBy(visible,item=>item.date)
+ : visible.reduce((all,item)=>{
+    (all[item.date]??=[]).push(item);
+    return all;
+   },{});
  q("#today-count").textContent=reminders.filter(r=>r.date===today&&!r.done).length;q("#reminder-count").textContent=reminders.filter(r=>r.itemType!=="task"&&!r.done).length;q("#task-count").textContent=reminders.filter(r=>r.itemType==="task"&&!r.done).length;q("#done-count").textContent=reminders.filter(r=>r.done).length;q("#shown-count").textContent=visible.length;
  const labels={  reminders:["ВАШІ НАГАДУВАННЯ","Нагадування"],  tasks:["ПЛАНУВАННЯ РОБОТИ","Задачі"],  active:["УСІ ВІДКРИТІ СПРАВИ","Активні"],  today:["НА СЬОГОДНІ","Ваш день"],  overdue:["ПОТРЕБУЮТЬ УВАГИ","Прострочені"],  done:["АРХІВ","Виконані"] };[q("#section-kicker").textContent,q("#section-name").textContent]=labels[filter]||labels.reminders;
  q("#reminders").innerHTML=visible.length?Object.entries(groups).map(([date,items])=>`
