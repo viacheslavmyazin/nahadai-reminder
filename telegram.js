@@ -1,4 +1,5 @@
-import { handleTelegramWebhookV2 } from "./telegram.js";
+import { createTelegramModule } from "./telegram.js";
+
 let jwksCache;
 let jwksCachedAt = 0;
 
@@ -611,240 +612,21 @@ async function sendTelegram(env, reminder) {
   if (!response.ok) throw new Error(`Telegram returned ${response.status}`);
 }
 
-async function sendTelegramWelcome(env, telegramId, displayName) {
-  if (!env.TELEGRAM_BOT_TOKEN) throw new Error("Telegram bot token is not configured");
-  const text = [
-    `👋 Вітаємо, <b>${escapeHtml(displayName)}</b>!`,
-    "",
-    "Бот «Нагадай» підключено до вашого облікового запису.",
-    "Ваші нагадування приватні — інші користувачі їх не бачать.",
-  ].join("\n");
-  const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: telegramId,
-      text,
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [[{ text: "🌿 Відкрити «Нагадай»", url: appUrl(env) }]],
-      },
-    }),
-  });
-  if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`Telegram welcome returned ${response.status}: ${details.slice(0, 300)}`);
-  }
-}
-
-async function isBotConnected(env, userId) {
-  const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?")
-    .bind(`welcome:${userId}`).first();
-  return Boolean(row?.value);
-}
-
-async function telegramApi(env, method, payload) {
-  if (!env.TELEGRAM_BOT_TOKEN) throw new Error("Telegram bot token is not configured");
-  const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.ok === false) {
-    throw new Error(`Telegram ${method} returned ${response.status}: ${JSON.stringify(data).slice(0, 300)}`);
-  }
-  return data;
-}
-
-async function answerCallback(env, callbackQueryId, text, showAlert = false) {
-  return telegramApi(env, "answerCallbackQuery", {
-    callback_query_id: callbackQueryId,
-    text,
-    show_alert: showAlert,
-  });
-}
-
-async function editTelegramMessage(env, chatId, messageId, text) {
-  return telegramApi(env, "editMessageText", {
-    chat_id: chatId,
-    message_id: messageId,
-    text,
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: [[{ text: "🌿 Відкрити «Нагадай»", url: appUrl(env) }]],
-    },
-  });
-}
-
-async function handleTelegramStart(env, message) {
-  const telegramId = String(message.chat?.id || "");
-  if (!telegramId) return;
-  const user = await env.DB.prepare(
-    "SELECT id, telegram_id, display_name FROM users WHERE telegram_id = ?",
-  ).bind(telegramId).first();
-  if (!user) {
-    await telegramApi(env, "sendMessage", {
-      chat_id: telegramId,
-      text: "Спочатку увійдіть у «Нагадай» через Telegram на сайті.",
-      reply_markup: { inline_keyboard: [[{ text: "🌿 Відкрити «Нагадай»", url: appUrl(env) }]] },
-    });
-    return;
-  }
-  await sendTelegramWelcome(env, telegramId, user.display_name);
-  await env.DB.prepare(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-  ).bind(`welcome:${user.id}`, String(Date.now())).run();
-}
-
-async function handleReminderCallback(env, callbackQuery) {
-  const callbackId = String(callbackQuery.id || "");
-  const data = String(callbackQuery.data || "");
-  const chatId = String(callbackQuery.message?.chat?.id || "");
-  const messageId = callbackQuery.message?.message_id;
-  const [action, reminderId] = data.split(":", 2);
-  if (!callbackId || !chatId || !messageId || !reminderId) return;
-
-  const reminder = await env.DB.prepare(
-    `SELECT r.id, r.user_id, r.title, r.note, r.due_at, r.done, r.sent, r.status, r.timezone,
-            u.telegram_id
-     FROM reminders r JOIN users u ON u.id = r.user_id
-     WHERE r.id = ? AND u.telegram_id = ?`,
-  ).bind(reminderId, chatId).first();
-
-  if (!reminder) {
-    await answerCallback(env, callbackId, "Нагадування не знайдено", true);
-    return;
-  }
-
-  const now = Date.now();
-  let message = "";
-  if (action === "done") {
-    await env.DB.prepare(
-      "UPDATE reminders SET done = 1, sent = 1, status = 'done', updated_at = ? WHERE id = ? AND user_id = ?",
-    ).bind(now, reminder.id, reminder.user_id).run();
-    message = `✅ <b>Виконано</b>
-
-${escapeHtml(reminder.title)}`;
-    await answerCallback(env, callbackId, "Позначено виконаним");
-  } else if (action === "delay10" || action === "delay60") {
-    const minutes = action === "delay10" ? 10 : 60;
-    const nextDueAt = now + minutes * 60 * 1000;
-    await env.DB.prepare(
-      "UPDATE reminders SET due_at = ?, done = 0, sent = 0, status = 'planned', updated_at = ? WHERE id = ? AND user_id = ?",
-    ).bind(nextDueAt, now, reminder.id, reminder.user_id).run();
-    const timeZone = normalizeTimeZone(reminder.timezone);
-    const nextTime = new Intl.DateTimeFormat("uk-UA", {
-      hour: "2-digit", minute: "2-digit", timeZone,
-    }).format(new Date(nextDueAt));
-    message = `⏱ <b>Відкладено</b>
-
-${escapeHtml(reminder.title)}
-
-Нове нагадування о <b>${nextTime}</b>`;
-    await answerCallback(env, callbackId, `Відкладено на ${minutes} хв`);
-  } else if (action === "tomorrow") {
-    const timeZone = normalizeTimeZone(reminder.timezone);
-    const current = zonedParts(Number(reminder.due_at), timeZone);
-    let nextDueAt = localPartsToTimestamp(addLocalDays(current, 1), timeZone);
-    if (nextDueAt <= now) nextDueAt = localPartsToTimestamp(addLocalDays(zonedParts(now, timeZone), 1), timeZone);
-    await env.DB.prepare(
-      "UPDATE reminders SET due_at = ?, done = 0, sent = 0, status = 'planned', updated_at = ? WHERE id = ? AND user_id = ?",
-    ).bind(nextDueAt, now, reminder.id, reminder.user_id).run();
-    const date = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeZone }).format(new Date(nextDueAt));
-    const time = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(nextDueAt));
-    message = `📅 <b>Перенесено</b>
-
-${escapeHtml(reminder.title)}
-
-Нова дата: <b>${date}, ${time}</b>`;
-    await answerCallback(env, callbackId, "Перенесено на завтра");
-  } else {
-    await answerCallback(env, callbackId, "Невідома дія", true);
-    return;
-  }
-
-  await editTelegramMessage(env, chatId, messageId, message);
-}
-
-async function handleTelegramWebhook(request, env) {
-  if (env.TELEGRAM_WEBHOOK_SECRET) {
-    const provided = request.headers.get("x-telegram-bot-api-secret-token") || "";
-    if (provided !== env.TELEGRAM_WEBHOOK_SECRET) {
-      return new Response("Forbidden", { status: 403 });
-    }
-  }
-
-  const update = await request.json().catch(() => null);
-  if (!update) return new Response("Bad Request", { status: 400 });
-
-  try {
-    if (update.callback_query) {
-      await handleReminderCallback(env, update.callback_query);
-    } else if (update.message && /^\/start(?:@\w+)?(?:\s|$)/i.test(String(update.message.text || ""))) {
-      await handleTelegramStart(env, update.message);
-    }
-  } catch (error) {
-    console.error("Telegram webhook processing failed", error);
-  }
-
-  return new Response("OK", { status: 200 });
-}
-
-async function processTelegramUpdates(env) {
-  if (!env.TELEGRAM_BOT_TOKEN) return;
-  const saved = await env.DB.prepare("SELECT value FROM settings WHERE key = ?")
-    .bind("telegram_update_offset").first();
-  let nextOffset = Number(saved?.value || 0);
-  const params = new URLSearchParams({
-    offset: String(nextOffset),
-    limit: "100",
-    timeout: "0",
-    allowed_updates: JSON.stringify(["message"]),
-  });
-  const response = await fetch(
-    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getUpdates?${params}`,
-  );
-  if (!response.ok) throw new Error(`Telegram getUpdates returned ${response.status}`);
-  const payload = await response.json();
-  for (const update of payload.result || []) {
-    nextOffset = Math.max(nextOffset, Number(update.update_id) + 1);
-    const message = update.message;
-    if (!message || !/^\/start(?:@\w+)?(?:\s|$)/i.test(String(message.text || ""))) continue;
-    const telegramId = String(message.chat?.id || "");
-    if (!telegramId) continue;
-    const user = await env.DB.prepare(
-      "SELECT id, telegram_id, display_name FROM users WHERE telegram_id = ?",
-    ).bind(telegramId).first();
-    if (!user || await isBotConnected(env, user.id)) continue;
-    try {
-      await sendTelegramWelcome(env, telegramId, user.display_name);
-      await env.DB.prepare(
-        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-      ).bind(`welcome:${user.id}`, String(Date.now())).run();
-    } catch (error) {
-      console.error("Failed to activate bot after Start", error);
-    }
-  }
-  await env.DB.prepare(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-  ).bind("telegram_update_offset", String(nextOffset)).run();
-}
-
-async function connectBot(env, user, origin) {
-  try {
-    await sendTelegramWelcome(env, user.telegram_id, user.display_name);
-    await env.DB.prepare(
-      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    ).bind(`welcome:${user.id}`, String(Date.now())).run();
-    return json({ ok: true, connected: true }, 200, origin);
-  } catch (error) {
-    return json({
-      error: "Відкрийте бота, натисніть Start і повторіть перевірку",
-      code: "BOT_NOT_STARTED",
-    }, 409, origin);
-  }
-}
+const {
+  sendTelegramWelcome,
+  isBotConnected,
+  handleTelegramWebhook,
+  processTelegramUpdates,
+  connectBot,
+} = createTelegramModule({
+  appUrl,
+  escapeHtml,
+  normalizeTimeZone,
+  zonedParts,
+  addLocalDays,
+  localPartsToTimestamp,
+  json,
+});
 
 async function listReminders(env, userId, origin) {
   const { results } = await env.DB.prepare(
@@ -948,7 +730,7 @@ async function handleRequest(request, env) {
     return finishLogin(request, env);
   }
   if (url.pathname === "/api/telegram/webhook" && request.method === "POST") {
-    return handleTelegramWebhookV2(request, env);
+    return handleTelegramWebhook(request, env);
   }
 
   const origin = originFor(request, env);
@@ -1004,16 +786,6 @@ export default {
     ctx.waitUntil(processDueReminders(env));
   },
 };
-
-
-
-
-
-
-
-
-
-
 
 
 

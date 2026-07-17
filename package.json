@@ -1,13 +1,371 @@
-{
-  "name": "nahadai-telegram-v2",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
-  },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+export function createTelegramModule({
+  appUrl,
+  escapeHtml,
+  normalizeTimeZone,
+  zonedParts,
+  addLocalDays,
+  localPartsToTimestamp,
+  json,
+}) {
+  async function telegramApi(env, method, payload) {
+    if (!env.TELEGRAM_BOT_TOKEN) throw new Error("Telegram bot token is not configured");
+    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) {
+      throw new Error(`Telegram ${method} returned ${response.status}: ${JSON.stringify(data).slice(0, 300)}`);
+    }
+    return data;
   }
+
+  function mainKeyboard(env) {
+    return {
+      keyboard: [
+        [{ text: "📅 Сьогодні" }, { text: "⚠️ Прострочені" }],
+        [{ text: "📋 Активні" }, { text: "✅ Виконані" }],
+        [{ text: "🌿 Відкрити планувальник", web_app: { url: appUrl(env) } }],
+      ],
+      resize_keyboard: true,
+      is_persistent: true,
+      input_field_placeholder: "Оберіть дію або введіть команду",
+    };
+  }
+
+  async function findTelegramUser(env, telegramId) {
+    return env.DB.prepare(
+      "SELECT id, telegram_id, display_name FROM users WHERE telegram_id = ?",
+    ).bind(String(telegramId)).first();
+  }
+
+  function dayBounds(timestamp = Date.now(), timeZone = "Europe/Kyiv") {
+    const local = zonedParts(timestamp, timeZone);
+    const start = localPartsToTimestamp({
+      year: local.year,
+      month: local.month,
+      day: local.day,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }, timeZone);
+    const next = addLocalDays({
+      year: local.year,
+      month: local.month,
+      day: local.day,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }, 1);
+    return { start, end: localPartsToTimestamp(next, timeZone) };
+  }
+
+  function priorityIcon(priority) {
+    return { high: "🔴", medium: "🟡", low: "🟢" }[priority] || "🟡";
+  }
+
+  function itemIcon(itemType) {
+    return itemType === "task" ? "📋" : "🔔";
+  }
+
+  async function sendTelegramWelcome(env, telegramId, displayName) {
+    const text = [
+      `👋 Вітаємо, <b>${escapeHtml(displayName)}</b>!`,
+      "",
+      "Бот «Нагадай» підключено до вашого облікового запису.",
+      "Оберіть потрібну дію в меню нижче.",
+    ].join("\n");
+    return telegramApi(env, "sendMessage", {
+      chat_id: telegramId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: mainKeyboard(env),
+    });
+  }
+
+  async function isBotConnected(env, userId) {
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?")
+      .bind(`welcome:${userId}`).first();
+    return Boolean(row?.value);
+  }
+
+  async function answerCallback(env, callbackQueryId, text, showAlert = false) {
+    return telegramApi(env, "answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+      text,
+      show_alert: showAlert,
+    });
+  }
+
+  async function editTelegramMessage(env, chatId, messageId, text) {
+    return telegramApi(env, "editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[{ text: "🌿 Відкрити «Нагадай»", web_app: { url: appUrl(env) } }]],
+      },
+    });
+  }
+
+  async function sendMenu(env, telegramId, displayName = "") {
+    const greeting = displayName ? `, <b>${escapeHtml(displayName)}</b>` : "";
+    return telegramApi(env, "sendMessage", {
+      chat_id: telegramId,
+      text: `🌿 <b>Нагадай</b>${greeting}\n\nОберіть потрібну дію:`,
+      parse_mode: "HTML",
+      reply_markup: mainKeyboard(env),
+    });
+  }
+
+  async function sendReminderCollection(env, telegramId, mode) {
+    const user = await findTelegramUser(env, telegramId);
+    if (!user) {
+      await telegramApi(env, "sendMessage", {
+        chat_id: telegramId,
+        text: "Спочатку відкрийте «Нагадай» через Telegram і виконайте вхід.",
+        reply_markup: { inline_keyboard: [[{ text: "🌿 Відкрити «Нагадай»", web_app: { url: appUrl(env) } }]] },
+      });
+      return;
+    }
+
+    const now = Date.now();
+    const timeZone = "Europe/Kyiv";
+    const { start, end } = dayBounds(now, timeZone);
+    let title;
+    let sql;
+    let bindings;
+
+    if (mode === "today") {
+      title = "📅 <b>Справи на сьогодні</b>";
+      sql = `SELECT id, title, note, due_at, priority, done, item_type, status, timezone
+             FROM reminders WHERE user_id = ? AND due_at >= ? AND due_at < ?
+             ORDER BY done ASC, due_at ASC LIMIT 30`;
+      bindings = [user.id, start, end];
+    } else if (mode === "overdue") {
+      title = "⚠️ <b>Прострочені справи</b>";
+      sql = `SELECT id, title, note, due_at, priority, done, item_type, status, timezone
+             FROM reminders WHERE user_id = ? AND done = 0 AND due_at < ?
+             ORDER BY due_at ASC LIMIT 30`;
+      bindings = [user.id, now];
+    } else if (mode === "done") {
+      title = "✅ <b>Останні виконані справи</b>";
+      sql = `SELECT id, title, note, due_at, priority, done, item_type, status, timezone
+             FROM reminders WHERE user_id = ? AND done = 1
+             ORDER BY updated_at DESC LIMIT 20`;
+      bindings = [user.id];
+    } else {
+      title = "📋 <b>Усі активні справи</b>";
+      sql = `SELECT id, title, note, due_at, priority, done, item_type, status, timezone
+             FROM reminders WHERE user_id = ? AND done = 0
+             ORDER BY due_at ASC LIMIT 30`;
+      bindings = [user.id];
+    }
+
+    const { results } = await env.DB.prepare(sql).bind(...bindings).all();
+    const items = results || [];
+    if (!items.length) {
+      await telegramApi(env, "sendMessage", {
+        chat_id: telegramId,
+        text: `${title}\n\nСписок порожній 🎉`,
+        parse_mode: "HTML",
+        reply_markup: mainKeyboard(env),
+      });
+      return;
+    }
+
+    const lines = [title, "", `Кількість: <b>${items.length}</b>`, ""];
+    for (const [index, item] of items.entries()) {
+      const zone = normalizeTimeZone(item.timezone || timeZone);
+      const due = new Date(Number(item.due_at));
+      const date = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "2-digit", timeZone: zone }).format(due);
+      const time = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone: zone }).format(due);
+      const state = item.done ? "✅" : priorityIcon(item.priority);
+      lines.push(`${index + 1}. ${state} ${itemIcon(item.item_type)} <b>${escapeHtml(item.title)}</b>`);
+      lines.push(`   🕒 ${date}, ${time}`);
+      if (item.note) lines.push(`   📝 ${escapeHtml(item.note).slice(0, 160)}`);
+      lines.push("");
+    }
+
+    const keyboard = [];
+    for (const item of items.filter((item) => !item.done).slice(0, 8)) {
+      keyboard.push([
+        { text: `✅ ${String(item.title).slice(0, 22)}`, callback_data: `done:${item.id}` },
+        { text: "📅 Завтра", callback_data: `tomorrow:${item.id}` },
+      ]);
+    }
+    keyboard.push([{ text: "🔄 Оновити", callback_data: `list:${mode}` }]);
+    keyboard.push([{ text: "🌿 Відкрити «Нагадай»", web_app: { url: appUrl(env) } }]);
+
+    await telegramApi(env, "sendMessage", {
+      chat_id: telegramId,
+      text: lines.join("\n").slice(0, 3900),
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard },
+    });
+  }
+
+  async function handleTelegramStart(env, message) {
+    const telegramId = String(message.chat?.id || "");
+    if (!telegramId) return;
+    const user = await findTelegramUser(env, telegramId);
+    if (!user) {
+      await telegramApi(env, "sendMessage", {
+        chat_id: telegramId,
+        text: "Спочатку увійдіть у «Нагадай» через Telegram на сайті.",
+        reply_markup: { inline_keyboard: [[{ text: "🌿 Відкрити «Нагадай»", web_app: { url: appUrl(env) } }]] },
+      });
+      return;
+    }
+    await sendMenu(env, telegramId, user.display_name);
+    await env.DB.prepare(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).bind(`welcome:${user.id}`, String(Date.now())).run();
+  }
+
+  async function handleTelegramMessage(env, message) {
+    const telegramId = String(message.chat?.id || "");
+    const text = String(message.text || "").trim();
+    if (!telegramId) return;
+
+    if (/^\/start(?:@\w+)?(?:\s|$)/i.test(text)) return handleTelegramStart(env, message);
+    if (/^\/(menu|help)(?:@\w+)?$/i.test(text)) {
+      const user = await findTelegramUser(env, telegramId);
+      return sendMenu(env, telegramId, user?.display_name || "");
+    }
+    if (/^\/today(?:@\w+)?$/i.test(text) || text === "📅 Сьогодні") return sendReminderCollection(env, telegramId, "today");
+    if (/^\/overdue(?:@\w+)?$/i.test(text) || text === "⚠️ Прострочені") return sendReminderCollection(env, telegramId, "overdue");
+    if (/^\/active(?:@\w+)?$/i.test(text) || text === "📋 Активні") return sendReminderCollection(env, telegramId, "active");
+    if (/^\/done(?:@\w+)?$/i.test(text) || text === "✅ Виконані") return sendReminderCollection(env, telegramId, "done");
+
+    await telegramApi(env, "sendMessage", {
+      chat_id: telegramId,
+      text: "Оберіть дію в меню або використайте /today, /overdue, /active, /done.",
+      reply_markup: mainKeyboard(env),
+    });
+  }
+
+  async function handleReminderCallback(env, callbackQuery) {
+    const callbackId = String(callbackQuery.id || "");
+    const data = String(callbackQuery.data || "");
+    const chatId = String(callbackQuery.message?.chat?.id || "");
+    const messageId = callbackQuery.message?.message_id;
+    const [action, reminderId] = data.split(":", 2);
+    if (!callbackId || !chatId || !messageId || !reminderId) return;
+
+    if (action === "list") {
+      await answerCallback(env, callbackId, "Оновлюємо список");
+      await sendReminderCollection(env, chatId, reminderId);
+      return;
+    }
+
+    const reminder = await env.DB.prepare(
+      `SELECT r.id, r.user_id, r.title, r.note, r.due_at, r.done, r.sent, r.status, r.timezone,
+              u.telegram_id
+       FROM reminders r JOIN users u ON u.id = r.user_id
+       WHERE r.id = ? AND u.telegram_id = ?`,
+    ).bind(reminderId, chatId).first();
+
+    if (!reminder) {
+      await answerCallback(env, callbackId, "Нагадування не знайдено", true);
+      return;
+    }
+
+    const now = Date.now();
+    let message = "";
+    if (action === "done") {
+      await env.DB.prepare(
+        "UPDATE reminders SET done = 1, sent = 1, status = 'done', updated_at = ? WHERE id = ? AND user_id = ?",
+      ).bind(now, reminder.id, reminder.user_id).run();
+      message = `✅ <b>Виконано</b>\n\n${escapeHtml(reminder.title)}`;
+      await answerCallback(env, callbackId, "Позначено виконаним");
+    } else if (action === "delay10" || action === "delay60") {
+      const minutes = action === "delay10" ? 10 : 60;
+      const nextDueAt = now + minutes * 60 * 1000;
+      await env.DB.prepare(
+        "UPDATE reminders SET due_at = ?, done = 0, sent = 0, status = 'planned', updated_at = ? WHERE id = ? AND user_id = ?",
+      ).bind(nextDueAt, now, reminder.id, reminder.user_id).run();
+      const zone = normalizeTimeZone(reminder.timezone);
+      const nextTime = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone: zone }).format(new Date(nextDueAt));
+      message = `⏱ <b>Відкладено</b>\n\n${escapeHtml(reminder.title)}\n\nНове нагадування о <b>${nextTime}</b>`;
+      await answerCallback(env, callbackId, `Відкладено на ${minutes} хв`);
+    } else if (action === "tomorrow") {
+      const zone = normalizeTimeZone(reminder.timezone);
+      const current = zonedParts(Number(reminder.due_at), zone);
+      let nextDueAt = localPartsToTimestamp(addLocalDays(current, 1), zone);
+      if (nextDueAt <= now) nextDueAt = localPartsToTimestamp(addLocalDays(zonedParts(now, zone), 1), zone);
+      await env.DB.prepare(
+        "UPDATE reminders SET due_at = ?, done = 0, sent = 0, status = 'planned', updated_at = ? WHERE id = ? AND user_id = ?",
+      ).bind(nextDueAt, now, reminder.id, reminder.user_id).run();
+      const date = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeZone: zone }).format(new Date(nextDueAt));
+      const time = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit", timeZone: zone }).format(new Date(nextDueAt));
+      message = `📅 <b>Перенесено</b>\n\n${escapeHtml(reminder.title)}\n\nНова дата: <b>${date}, ${time}</b>`;
+      await answerCallback(env, callbackId, "Перенесено на завтра");
+    } else {
+      await answerCallback(env, callbackId, "Невідома дія", true);
+      return;
+    }
+    await editTelegramMessage(env, chatId, messageId, message);
+  }
+
+  async function handleTelegramWebhook(request, env) {
+    if (env.TELEGRAM_WEBHOOK_SECRET) {
+      const provided = request.headers.get("x-telegram-bot-api-secret-token") || "";
+      if (provided !== env.TELEGRAM_WEBHOOK_SECRET) return new Response("Forbidden", { status: 403 });
+    }
+    const update = await request.json().catch(() => null);
+    if (!update) return new Response("Bad Request", { status: 400 });
+    try {
+      if (update.callback_query) await handleReminderCallback(env, update.callback_query);
+      else if (update.message) await handleTelegramMessage(env, update.message);
+    } catch (error) {
+      console.error("Telegram webhook processing failed", error);
+    }
+    return new Response("OK", { status: 200 });
+  }
+
+  async function processTelegramUpdates(env) {
+    if (!env.TELEGRAM_BOT_TOKEN) return;
+    const saved = await env.DB.prepare("SELECT value FROM settings WHERE key = ?")
+      .bind("telegram_update_offset").first();
+    let nextOffset = Number(saved?.value || 0);
+    const params = new URLSearchParams({
+      offset: String(nextOffset), limit: "100", timeout: "0", allowed_updates: JSON.stringify(["message"]),
+    });
+    const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getUpdates?${params}`);
+    if (!response.ok) throw new Error(`Telegram getUpdates returned ${response.status}`);
+    const payload = await response.json();
+    for (const update of payload.result || []) {
+      nextOffset = Math.max(nextOffset, Number(update.update_id) + 1);
+      if (update.message) await handleTelegramMessage(env, update.message);
+    }
+    await env.DB.prepare(
+      "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    ).bind("telegram_update_offset", String(nextOffset)).run();
+  }
+
+  async function connectBot(env, user, origin) {
+    try {
+      await sendTelegramWelcome(env, user.telegram_id, user.display_name);
+      await env.DB.prepare(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ).bind(`welcome:${user.id}`, String(Date.now())).run();
+      return json({ ok: true, connected: true }, 200, origin);
+    } catch {
+      return json({
+        error: "Відкрийте бота, натисніть Start і повторіть перевірку",
+        code: "BOT_NOT_STARTED",
+      }, 409, origin);
+    }
+  }
+
+  return {
+    sendTelegramWelcome,
+    isBotConnected,
+    handleTelegramWebhook,
+    processTelegramUpdates,
+    connectBot,
+  };
 }
