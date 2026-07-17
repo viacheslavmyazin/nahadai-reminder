@@ -129,13 +129,10 @@ function updateSummaryDashboard(){
  const currentDateTime=now.getTime();
 
  const activeItems=reminders.filter(item=>!item.done);
-
  const todayItems=activeItems.filter(item=>item.date===today);
-
-const overdueItems=activeItems.filter(item=>
- isOverdue(item,currentDateTime)
-);
-
+ const overdueItems=activeItems.filter(item=>
+  isOverdue(item,currentDateTime)
+ );
  const doneItems=reminders.filter(item=>item.done);
 
  q("#active-count").textContent=activeItems.length;
@@ -144,7 +141,6 @@ const overdueItems=activeItems.filter(item=>
  q("#done-summary-count").textContent=doneItems.length;
 
  const hour=now.getHours();
-
  let greeting="Добрий вечір";
 
  if(hour>=5&&hour<12){
@@ -159,41 +155,22 @@ const overdueItems=activeItems.filter(item=>
   ? `${greeting}, ${userName} 👋`
   : `${greeting} 👋`;
 
+ const next=getNextReminder();
+
  if(overdueItems.length>0){
   q("#summary-title").textContent=
    `У вас ${overdueItems.length} прострочених справ`;
 
   q("#summary-subtitle").textContent=
    "Рекомендуємо почати з них, а потім перейти до запланованих справ.";
- }else if(todayItems.length>0){
-  q("#summary-title").textContent=
-   `На сьогодні заплановано ${todayItems.length} справ`;
+
+ }else if(next){
+  q("#summary-title").textContent=next.title;
 
   q("#summary-subtitle").textContent=
-   "Усі важливі задачі та нагадування зібрані в одному місці.";
-}else if(activeItems.length>0){
-
- const next=getNextReminder();
-
- if(next){
-
-   q("#summary-title").textContent=
-    next.title;
-
-   q("#summary-subtitle").textContent=
-    `${next.time} • ${formatRemaining(next.due-currentDateTime)}`;
+   `${prettyDay(next.date)}, ${next.time} • ${formatRemaining(next.due-currentDateTime)}`;
 
  }else{
-
-   q("#summary-title").textContent=
-    "На сьогодні термінових справ немає";
-
-   q("#summary-subtitle").textContent=
-    `У вас ${activeItems.length} активних справ.`;
-
- }
-
-}else{
   q("#summary-title").textContent=
    "Усі справи виконані";
 
