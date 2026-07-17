@@ -154,3 +154,16 @@
     font-size:22px;
   }
 }
+
+.summary-item{
+  cursor:pointer;
+}
+
+.summary-item:focus-visible{
+  outline:3px solid #d8a14a;
+  outline-offset:3px;
+}
+
+.summary-item:active{
+  transform:translateY(0);
+}
