@@ -10,6 +10,10 @@ try{currentUser=JSON.parse(localStorage.getItem(USER_STORE)||"null")}catch{curre
 const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const prettyDay=d=>d===today?"Сьогодні":d===addDays(1)?"Завтра":new Intl.DateTimeFormat("uk-UA",{day:"numeric",month:"long"}).format(new Date(d+"T12:00"));
+const formatCardDate=d=>{
+ const [year,month,day]=String(d||"").split("-");
+ return year&&month&&day?`${day}.${month}.${year}`:String(d||"");
+};
 const weekday=d=>new Intl.DateTimeFormat("uk-UA",{weekday:"short"}).format(new Date(d+"T12:00"));
 q("#today-label").textContent=new Intl.DateTimeFormat("uk-UA",{weekday:"long",day:"numeric",month:"long"}).format(new Date())+". Гарного вам дня!";
 const cacheKey=()=>currentUser?`nahadai-cache-v2:${currentUser.id}`:"";
@@ -349,7 +353,7 @@ function render(){
   ${items.map(r=>{const repeat=repeatLabel(r),isTask=r.itemType==="task";return `<article class="reminder-card ${r.done?"done":""} ${isTask?"task-card":""}" data-id="${esc(r.id)}">
    <button class="check-btn" data-action="toggle" aria-label="${r.done?"Повернути":"Виконано"}">${r.done?"✓":""}</button>
    <div class="card-content"><div class="card-meta"><span class="item-badge ${isTask?"task":"reminder"}">${isTask?"Задача":"Нагадування"}</span>${isTask?`<span class="status-badge ${esc(r.status)}">${statusLabel(r.status)}</span>`:""}${repeat?`<span class="repeat-badge">↻ ${esc(repeat)}</span>`:""}</div><div class="card-title-row"><h3>${esc(r.title)}</h3><i class="priority-dot" style="background:${priorities[r.priority].color}" title="${priorities[r.priority].label}"></i></div>
-   ${r.note?`<p>${esc(r.note)}</p>`:""}<span class="time">◷ &nbsp;${r.time}</span></div>
+   ${r.note?`<p>${esc(r.note)}</p>`:""}<div class="card-datetime" aria-label="Дата і час"><span class="card-date">📅 ${formatCardDate(r.date)}</span><span class="time">◷ ${r.time}</span></div></div>
    <div class="menu-wrap"><button class="more-btn" data-action="menu">•••</button><div class="card-menu hidden">${isTask&&r.status==="planned"?'<button data-action="start">▶ &nbsp;У роботу</button>':""}<button data-action="edit">✎ &nbsp;Редагувати</button><button class="danger" data-action="delete">⌫ &nbsp;Видалити</button></div></div>
   </article>`}).join("")}</div>`).join(""):`<div class="empty"><span class="empty-icon">♢</span><h3>Тут поки тихо</h3><p>${query?"Нічого не знайдено. Спробуйте інший запит.":filter==="tasks"?"Додайте першу задачу, визначте строк і статус.":"Додайте нагадування — одноразове або регулярне."}</p></div>`;
  const done=reminders.filter(r=>r.done).length;q("#progress-label").textContent=done+" виконано";q("#progress-bar").style.width=Math.min(100,done/Math.max(1,reminders.length)*100)+"%";renderCalendar();
@@ -398,13 +402,106 @@ q(".summary-grid").onkeydown=e=>{
  }
 };
 q("#search").oninput=e=>{query=e.target.value;render()};
+function closeCardMenus(exceptCard=null){
+ qa(".reminder-card.menu-open").forEach(openCard=>{
+  if(openCard===exceptCard)return;
+  openCard.classList.remove("menu-open");
+  const menu=openCard.querySelector(".card-menu");
+  menu?.classList.add("hidden");
+  menu?.classList.remove("open-up");
+ });
+}
+
 q("#reminders").onclick=async e=>{
- const action=e.target.closest("[data-action]");if(!action)return;const card=action.closest(".reminder-card"),id=card.dataset.id,item=reminders.find(r=>String(r.id)===id);if(!item)return;
- if(action.dataset.action==="toggle"){item.done=!item.done;item.status=item.done?"done":"planned";item.notified=false;saveCache();render();try{await syncReminder(item)}catch{notify("Не синхронізовано","Спробуйте ще раз",false)}}
- if(action.dataset.action==="start"){item.status="in_progress";item.done=false;item.notified=false;saveCache();render();try{await syncReminder(item);notify("Задача в роботі",item.title)}catch{notify("Не синхронізовано","Спробуйте ще раз",false)}}
- if(action.dataset.action==="menu")card.querySelector(".card-menu").classList.toggle("hidden");if(action.dataset.action==="edit")openModal(item);
- if(action.dataset.action==="delete"){reminders=reminders.filter(r=>String(r.id)!==id);saveCache();render();try{await deleteRemote(id)}catch{notify("Не синхронізовано","Видалення не збережено на сервері",false)}}
+ const action=e.target.closest("[data-action]");
+ if(!action)return;
+
+ const card=action.closest(".reminder-card");
+ if(!card)return;
+
+ const id=card.dataset.id;
+ const item=reminders.find(r=>String(r.id)===id);
+ if(!item)return;
+
+ const actionName=action.dataset.action;
+
+ if(actionName==="menu"){
+  e.stopPropagation();
+  const menu=card.querySelector(".card-menu");
+  const shouldOpen=menu.classList.contains("hidden");
+
+  closeCardMenus();
+
+  if(shouldOpen){
+   card.classList.add("menu-open");
+   menu.classList.remove("hidden");
+   menu.classList.remove("open-up");
+
+   requestAnimationFrame(()=>{
+    const rect=menu.getBoundingClientRect();
+    if(rect.bottom>window.innerHeight-12){
+     menu.classList.add("open-up");
+    }
+   });
+  }
+
+  return;
+ }
+
+ closeCardMenus();
+
+ if(actionName==="toggle"){
+  item.done=!item.done;
+  item.status=item.done?"done":"planned";
+  item.notified=false;
+  saveCache();
+  render();
+  try{
+   await syncReminder(item);
+  }catch{
+   notify("Не синхронізовано","Спробуйте ще раз",false);
+  }
+  return;
+ }
+
+ if(actionName==="start"){
+  item.status="in_progress";
+  item.done=false;
+  item.notified=false;
+  saveCache();
+  render();
+  try{
+   await syncReminder(item);
+   notify("Задача в роботі",item.title);
+  }catch{
+   notify("Не синхронізовано","Спробуйте ще раз",false);
+  }
+  return;
+ }
+
+ if(actionName==="edit"){
+  openModal(item);
+  return;
+ }
+
+ if(actionName==="delete"){
+  reminders=reminders.filter(r=>String(r.id)!==id);
+  saveCache();
+  render();
+  try{
+   await deleteRemote(id);
+  }catch{
+   notify("Не синхронізовано","Видалення не збережено на сервері",false);
+  }
+ }
 };
+
+document.addEventListener("click",e=>{
+ if(!e.target.closest(".menu-wrap")){
+  closeCardMenus();
+ }
+});
+
 q("#telegram-settings").onclick=q("#profile-button").onclick=q("#header-account").onclick=openAccount;
 q("#close-account").onclick=q("#close-account-primary").onclick=()=>q("#account-modal").classList.add("hidden");
 q("#bot-check").onclick=verifyBotConnection;q("#bot-later").onclick=()=>{stopBotActivation();hideBotOnboarding()};q("#open-bot").onclick=beginBotActivation;
@@ -413,7 +510,7 @@ window.addEventListener("focus",()=>{if(botActivationTimer)attemptBotActivation(
 q("#account-modal").addEventListener("mousedown",e=>{if(e.target===e.currentTarget)q("#account-modal").classList.add("hidden")});
 q("#logout").onclick=async()=>{try{await api("/api/logout",{method:"POST"})}catch{}clearSession();reminders=[];q("#account-modal").classList.add("hidden");render();showAuth("Ви вийшли з облікового запису.")};
 q("#prev-month").onclick=()=>{monthOffset--;renderCalendar()};q("#next-month").onclick=()=>{monthOffset++;renderCalendar()};
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeModal();q("#account-modal").classList.add("hidden")}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeCardMenus();closeModal();q("#account-modal").classList.add("hidden")}});
 async function checkBrowserReminders(){
  if(!sessionToken||!currentUser||!("Notification" in window)||Notification.permission!=="granted")return;
  const run=async()=>{

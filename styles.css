@@ -295,3 +295,59 @@
   gap:4px;
  }
 }
+
+/* ===== Task card menu layering and date/time ===== */
+.reminder-card{
+  z-index:0;
+  overflow:visible;
+}
+
+.reminder-card.menu-open{
+  z-index:15;
+  transform:none;
+}
+
+.reminder-card.menu-open:hover{
+  transform:none;
+}
+
+.reminder-card.menu-open .card-menu,
+.card-menu{
+  z-index:16;
+}
+
+.card-menu.open-up{
+  top:auto;
+  bottom:30px;
+}
+
+.card-datetime{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px 12px;
+  margin-top:8px;
+  color:#718078;
+  font-size:10px;
+  font-weight:600;
+}
+
+.card-date,
+.card-datetime .time{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  white-space:nowrap;
+}
+
+@media(max-width:650px){
+  .card-datetime{
+    gap:6px 10px;
+    margin-top:7px;
+  }
+
+  .card-menu{
+    min-width:145px;
+  }
+}
+
